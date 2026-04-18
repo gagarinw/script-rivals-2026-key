@@ -1,10 +1,12 @@
--- [[ ILLIA SYSTEM V3 - AUTO-SAVE & LOGOUT FUNCTION ]] --
+-- [[ ILLIA SYSTEM V3 - FIXED (NO CRASH) ]] --
 
 local API_URL = "https://script.google.com/macros/s/AKfycbyeA-rWBrLS6otVeDtjQvSf3Dfu_0OhX3BHFdq-4M42OYz6aDUy71BO7gARj-fsySztgQ/exec"
 local GEN_LINK = API_URL 
 local HttpService = game:GetService("HttpService")
 
--- Файлы для сохранения
+-- Проверка поддержки файлов (чтобы не было ошибки nil value)
+local canSave = (isfile and readfile and writefile and delfile)
+
 local KEY_FILE = "illia_v3_key.txt"
 local SETTINGS_FILE = "illia_v3_settings.json"
 
@@ -20,14 +22,14 @@ local Settings = {
     AimKey = Enum.KeyCode.E        
 }
 
--- Функция сохранения настроек
 local function SaveConfig()
-    writefile(SETTINGS_FILE, HttpService:JSONEncode(Settings))
+    if canSave then
+        pcall(function() writefile(SETTINGS_FILE, HttpService:JSONEncode(Settings)) end)
+    end
 end
 
--- Функция загрузки настроек
 local function LoadConfig()
-    if isfile(SETTINGS_FILE) then
+    if canSave and isfile(SETTINGS_FILE) then
         local success, data = pcall(function() return HttpService:JSONDecode(readfile(SETTINGS_FILE)) end)
         if success then
             for k, v in pairs(data) do Settings[k] = v end
@@ -50,19 +52,18 @@ local Colors = {
     AdminGold = Color3.fromRGB(255, 200, 0),
     BG = Color3.fromRGB(15, 15, 15),
     White = Color3.fromRGB(255, 255, 255),
-    LogoutRed = Color3.fromRGB(200, 50, 50) -- Цвет для кнопки выхода
+    LogoutRed = Color3.fromRGB(200, 50, 50)
 }
 
 LoadConfig()
 
--- [[ ПРОВЕРКА КЛЮЧА ]] --
 local function VerifyKey(key)
     local success, result = pcall(function()
         return game:HttpGet(API_URL .. "?check=" .. key .. "&hwid=" .. HWID)
     end)
     if success then
         if result == "admin" or result == "valid" then
-            writefile(KEY_FILE, key)
+            if canSave then pcall(function() writefile(KEY_FILE, key) end) end
             IsAdmin = (result == "admin")
             return "ok"
         elseif result == "wrong_hwid" then return "Ключ занят другим ПК!"
@@ -71,10 +72,8 @@ local function VerifyKey(key)
     return "Неверный ключ!"
 end
 
--- Вперед объявляем функцию ShowLogin для вызова из Logout
-local ShowLogin
+local ShowLogin -- Объявляем заранее
 
--- [[ СОЗДАНИЕ СЛАЙДЕРА ]] --
 local function CreateSlider(parent, text, prop, min, max)
     local Frame = Instance.new("Frame", parent)
     Frame.Size = UDim2.new(0.9, 0, 0, 40)
@@ -120,7 +119,6 @@ local function CreateSlider(parent, text, prop, min, max)
     end)
 end
 
--- [[ ГЛАВНОЕ МЕНЮ ]] --
 local AimStatusLabel
 local ActiveMenu = nil
 
@@ -183,7 +181,6 @@ function BuildMenu()
     CreateSlider(Main, "Цвет ESP (Hue)", "ESP_Hue", 0, 1)
     Toggle("FOV Круг", "ShowFOV")
 
-    -- КНОПКА ВЫХОДА
     local Logout = Instance.new("TextButton", Main)
     Logout.Size = UDim2.new(0.9, 0, 0, 35)
     Logout.BackgroundColor3 = Colors.LogoutRed
@@ -193,17 +190,17 @@ function BuildMenu()
     Instance.new("UICorner", Logout)
 
     Logout.MouseButton1Click:Connect(function()
-        if isfile(KEY_FILE) then delfile(KEY_FILE) end -- Удаляем файл ключа
-        Gui:Destroy() -- Закрываем чит
+        if canSave and isfile(KEY_FILE) then pcall(function() delfile(KEY_FILE) end) end
+        Gui:Destroy()
         ActiveMenu = nil
         AimbotActive = false
-        ShowLogin() -- Показываем экран входа
+        ShowLogin()
     end)
 
     return Gui
 end
 
--- [[ ЛОГИКА АИМА И ESP ]] --
+-- ЛОГИКА АИМА
 local Circle = Drawing.new("Circle")
 Circle.Thickness = 1
 Circle.Color = Colors.White
@@ -243,7 +240,6 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- [[ ЛОГИКА ВХОДА ]] --
 local function StartCheat()
     if CoreGui:FindFirstChild("IlliaLogin") then CoreGui.IlliaLogin:Destroy() end
     ActiveMenu = BuildMenu()
@@ -263,7 +259,7 @@ ShowLogin = function()
     local Inp = Instance.new("TextBox", Box)
     Inp.Size = UDim2.new(0.8, 0, 0, 40)
     Inp.Position = UDim2.new(0.1, 0, 0.25, 0)
-    Inp.PlaceholderText = "Введите новый ключ..."
+    Inp.PlaceholderText = "Введите ключ..."
     Inp.BackgroundColor3 = Color3.fromRGB(30,30,30)
     Inp.TextColor3 = Colors.White
     Instance.new("UICorner", Inp)
@@ -290,16 +286,18 @@ ShowLogin = function()
     end)
 end
 
--- ПРОВЕРКА ПРИ ЗАПУСКЕ
-if isfile(KEY_FILE) then
-    local savedKey = readfile(KEY_FILE)
-    local r = VerifyKey(savedKey)
-    if r == "ok" then StartCheat() else ShowLogin() end
-else
-    ShowLogin()
+-- БЕЗОПАСНАЯ ПРОВЕРКА ПРИ ЗАПУСКЕ
+local saved = false
+if canSave then
+    local s, key = pcall(function() return isfile(KEY_FILE) and readfile(KEY_FILE) end)
+    if s and key then
+        local r = VerifyKey(key)
+        if r == "ok" then StartCheat() saved = true end
+    end
 end
 
--- [[ УПРАВЛЕНИЕ ]] --
+if not saved then ShowLogin() end
+
 UserInputService.InputBegan:Connect(function(i, g)
     if g then return end
     if i.KeyCode == Settings.MenuKey and ActiveMenu then
