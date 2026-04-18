@@ -1,4 +1,4 @@
--- [[ ILLIA SYSTEM V3 - ULTIMATE & FIXED ]] --
+-- [[ ILLIA SYSTEM V3 - FULL & FINAL SYNC ]] --
 
 local API_URL = "https://script.google.com/macros/s/AKfycbyeA-rWBrLS6otVeDtjQvSf3Dfu_0OhX3BHFdq-4M42OYz6aDUy71BO7gARj-fsySztgQ/exec"
 local HttpService = game:GetService("HttpService")
@@ -6,11 +6,11 @@ local HttpService = game:GetService("HttpService")
 local canSave = (isfile and readfile and writefile and delfile)
 local KEY_FILE = "illia_v3_key.txt"
 
--- Настройки (сохраняются в сессии)
+-- Настройки
 local Settings = {
     AimbotEnabled = true,
     AimRadius = 150,
-    Sensitivity = 0.15, -- Оптимально, чтобы не улетала мышка
+    Sensitivity = 0.1, -- Низкая чувствительность для точности
     AimKey = Enum.KeyCode.E,
     ShowFOV = true,
     ESP_Enabled = true,
@@ -20,11 +20,13 @@ local Settings = {
 
 local IsAdmin, ExpiryTimestamp, AimbotActive = false, 0, false
 local Players, LocalPlayer = game:GetService("Players"), game:GetService("Players").LocalPlayer
-local Camera, RunService = workspace.CurrentCamera, game:GetService("RunService")
-local UserInputService, CoreGui = game:GetService("UserInputService"), game:GetService("CoreGui")
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
 local HWID = game:GetService("RbxAnalyticsService"):GetClientId()
 
--- Визуал FOV
+-- Визуал круга
 local FOVCircle = Drawing.new("Circle")
 FOVCircle.Thickness = 1
 FOVCircle.Transparency = 1
@@ -40,7 +42,7 @@ local Colors = {
     Dark = Color3.fromRGB(25, 25, 25)
 }
 
--- [[ СИСТЕМА ПРОВЕРКИ ]] --
+-- [[ ПРОВЕРКА КЛЮЧА ]] --
 local function VerifyKey(key)
     local s, r = pcall(function() return game:HttpGet(API_URL .. "?check=" .. key .. "&hwid=" .. HWID) end)
     if s then
@@ -55,13 +57,13 @@ local function VerifyKey(key)
             if canSave then writefile(KEY_FILE, key) end
             return "ok"
         elseif r == "expired" then return "Ключ истек!"
-        elseif r == "wrong_hwid" then return "Ключ привязан к другому ПК!"
+        elseif r == "wrong_hwid" then return "Ключ другого ПК!"
         end
     end
     return "Ошибка ключа"
 end
 
--- [[ КОНСТРУКТОР МЕНЮ ]] --
+-- [[ КОНСТРУКТОР ЭЛЕМЕНТОВ ]] --
 local function CreateToggle(parent, name, prop)
     local B = Instance.new("TextButton", parent)
     B.Size = UDim2.new(0.9, 0, 0, 35); B.Font = "GothamBold"; B.TextSize = 13; B.TextColor3 = Colors.White
@@ -94,24 +96,24 @@ local function CreateSlider(parent, name, prop, min, max)
     end)
 end
 
+-- [[ ГЛАВНОЕ МЕНЮ ]] --
 function BuildMenu()
     if CoreGui:FindFirstChild("IlliaV3_Menu") then CoreGui.IlliaV3_Menu:Destroy() end
     local G = Instance.new("ScreenGui", CoreGui); G.Name = "IlliaV3_Menu"
     local M = Instance.new("ScrollingFrame", G)
-    M.Size = UDim2.new(0, 280, 0, 420); M.Position = UDim2.new(0.5, -140, 0.5, -210); M.BackgroundColor3 = Colors.BG; M.AutomaticCanvasSize = "Y"; M.ScrollBarThickness = 2
+    M.Size = UDim2.new(0, 280, 0, 440); M.Position = UDim2.new(0.5, -140, 0.5, -220); M.BackgroundColor3 = Colors.BG; M.AutomaticCanvasSize = "Y"; M.ScrollBarThickness = 2; M.BorderSizePixel = 0
     Instance.new("UICorner", M)
     local L = Instance.new("UIListLayout", M); L.Padding = UDim.new(0, 10); L.HorizontalAlignment = "Center"
     Instance.new("UIPadding", M).PaddingTop = UDim.new(0, 10)
 
     local H = Instance.new("TextLabel", M); H.Size = UDim2.new(1, 0, 0, 45); H.Font = "GothamBold"
-    H.Text = IsAdmin and "👑 ADMIN PANEL" or "👤 USER PANEL"
+    H.Text = IsAdmin and "👑 ILLIA V3 ADMIN" or "👤 ILLIA V3 USER"
     H.BackgroundColor3 = IsAdmin and Colors.AdminGold or Colors.MainBlue
     H.TextColor3 = IsAdmin and Color3.new(0,0,0) or Colors.White; Instance.new("UICorner", H)
 
-    local Timer = Instance.new("TextLabel", M); Timer.Size = UDim2.new(0.9, 0, 0, 20); Timer.TextColor3 = Colors.White; Timer.BackgroundTransparency = 1; Timer.Font = "GothamBold"
-    local AimLab = Instance.new("TextLabel", M); AimLab.Size = UDim2.new(0.9, 0, 0, 20); AimLab.Font = "GothamBold"
+    local TimerLabel = Instance.new("TextLabel", M); TimerLabel.Size = UDim2.new(0.9, 0, 0, 20); TimerLabel.TextColor3 = Colors.White; TimerLabel.BackgroundTransparency = 1; TimerLabel.Font = "GothamBold"
+    local AimStatus = Instance.new("TextLabel", M); AimStatus.Size = UDim2.new(0.9, 0, 0, 20); AimStatus.Font = "GothamBold"
 
-    -- Кнопки управления
     CreateSlider(M, "Радиус", "AimRadius", 50, 800)
     CreateSlider(M, "Плавность", "Sensitivity", 0.01, 1)
     CreateToggle(M, "FOV Круг", "ShowFOV")
@@ -124,62 +126,62 @@ function BuildMenu()
     local Out = Instance.new("TextButton", M); Out.Size = UDim2.new(0.9, 0, 0, 35); Out.BackgroundColor3 = Colors.LogoutRed; Out.Text = "LOGOUT"; Out.TextColor3 = Colors.White; Out.Font = "GothamBold"; Instance.new("UICorner", Out)
     Out.MouseButton1Click:Connect(function() G:Destroy(); FOVCircle.Visible = false; if canSave then pcall(function() delfile(KEY_FILE) end) end; ShowLogin() end)
 
-    -- [[ ГЛАВНЫЙ ЦИКЛ ОБНОВЛЕНИЯ ]] --
+    -- [[ ГЛАВНЫЙ ЦИКЛ ]] --
     RunService.RenderStepped:Connect(function()
         if G.Parent then
-            local mouseLoc = UserInputService:GetMouseLocation()
+            local Center = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
             
-            -- Обновление таймера
+            -- Таймер
             local left = (ExpiryTimestamp > 0) and (math.floor(ExpiryTimestamp/1000) - os.time()) or 0
-            Timer.Text = IsAdmin and "БЕССРОЧНО" or "Осталось: " .. math.max(0, left) .. " сек"
+            TimerLabel.Text = IsAdmin and "БЕССРОЧНО" or "Осталось: " .. math.max(0, left) .. " сек"
             
-            AimLab.Text = "ЗАХВАТ [E]: " .. (AimbotActive and "ВКЛ" or "ВЫКЛ")
-            AimLab.TextColor3 = AimbotActive and Color3.new(0,1,0) or Color3.new(1,0,0)
+            AimStatus.Text = "ЗАХВАТ [E]: " .. (AimbotActive and "ВКЛ" or "ВЫКЛ")
+            AimStatus.TextColor3 = AimbotActive and Color3.new(0,1,0) or Color3.new(1,0,0)
 
+            -- FOV
             FOVCircle.Visible = Settings.ShowFOV
             FOVCircle.Radius = Settings.AimRadius
-            FOVCircle.Position = mouseLoc
+            FOVCircle.Position = Center
 
-            -- ESP Логика
-            for _, p in pairs(Players:GetPlayers()) do
-                if p ~= LocalPlayer and p.Character then
-                    local h = p.Character:FindFirstChild("Highlight") or Instance.new("Highlight", p.Character)
-                    h.Enabled = Settings.ESP_Enabled
-                    h.FillColor = Settings.ESP_Rainbow and Color3.fromHSV((tick()*0.5)%1, 0.8, 1) or Color3.fromHSV(Settings.ESP_Hue, 0.8, 1)
+            -- ESP
+            if Settings.ESP_Enabled then
+                for _, p in pairs(Players:GetPlayers()) do
+                    if p ~= LocalPlayer and p.Character then
+                        local h = p.Character:FindFirstChild("Highlight") or Instance.new("Highlight", p.Character)
+                        h.Enabled = true
+                        h.FillColor = Settings.ESP_Rainbow and Color3.fromHSV((tick()*0.5)%1, 0.8, 1) or Color3.fromHSV(Settings.ESP_Hue, 0.8, 1)
+                    end
                 end
             end
 
-            -- АИМБОТ ЛОГИКА (ИСПРАВЛЕННАЯ)
+            -- AIMBOT (FIXED)
             if AimbotActive and Settings.AimbotEnabled then
                 local target, dist = nil, Settings.AimRadius
                 for _, v in pairs(Players:GetPlayers()) do
                     if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("Head") and v.Character.Humanoid.Health > 0 then
                         local p, vis = Camera:WorldToViewportPoint(v.Character.Head.Position)
                         if vis then
-                            local mag = (Vector2.new(p.X, p.Y) - mouseLoc).Magnitude
+                            local mag = (Vector2.new(p.X, p.Y) - Center).Magnitude
                             if mag < dist then target = Vector2.new(p.X, p.Y); dist = mag end
                         end
                     end
                 end
                 if target then
-                    local diff = (target - mouseLoc) * Settings.Sensitivity
+                    -- Двигаем мышь ровно из центра к цели
+                    local diff = (target - Center) * Settings.Sensitivity
                     mousemoverel(diff.X, diff.Y)
                 end
-            end
-            
-            -- Кик если время вышло
-            if not IsAdmin and ExpiryTimestamp > 0 and left <= 0 then
-                G:Destroy(); FOVCircle.Visible = false; ShowLogin()
             end
         end
     end)
 end
 
+-- [[ ОКНО ВХОДА ]] --
 function ShowLogin()
     if CoreGui:FindFirstChild("IlliaLogin") then CoreGui.IlliaLogin:Destroy() end
     local A = Instance.new("ScreenGui", CoreGui); A.Name = "IlliaLogin"
     local B = Instance.new("Frame", A); B.Size = UDim2.new(0, 300, 0, 200); B.Position = UDim2.new(0.5,-150,0.5,-100); B.BackgroundColor3 = Colors.BG; Instance.new("UICorner", B)
-    local I = Instance.new("TextBox", B); I.Size = UDim2.new(0.8,0,0,40); I.Position = UDim2.new(0.1,0,0.25,0); I.PlaceholderText = "Ключ..."; I.BackgroundColor3 = Colors.Dark; I.TextColor3 = Colors.White; Instance.new("UICorner", I)
+    local I = Instance.new("TextBox", B); I.Size = UDim2.new(0.8,0,0,40); I.Position = UDim2.new(0.1,0,0.25,0); I.PlaceholderText = "Введите ключ..."; I.BackgroundColor3 = Colors.Dark; I.TextColor3 = Colors.White; Instance.new("UICorner", I)
     local S = Instance.new("TextButton", B); S.Size = UDim2.new(0.8,0,0,40); S.Position = UDim2.new(0.1,0,0.6,0); S.BackgroundColor3 = Colors.MainBlue; S.Text = "ВОЙТИ"; S.TextColor3 = Colors.White; Instance.new("UICorner", S)
     S.MouseButton1Click:Connect(function()
         local res = VerifyKey(I.Text)
@@ -187,15 +189,11 @@ function ShowLogin()
     end)
 end
 
--- Кнопка активации
 UserInputService.InputBegan:Connect(function(i, g)
     if not g and i.KeyCode == Settings.AimKey then AimbotActive = not AimbotActive end
 end)
 
--- Авто-вход
+-- СТАРТ
 if canSave and isfile(KEY_FILE) then
-    local k = readfile(KEY_FILE)
-    if VerifyKey(k) == "ok" then BuildMenu() else ShowLogin() end
-else
-    ShowLogin()
-end
+    if VerifyKey(readfile(KEY_FILE)) == "ok" then BuildMenu() else ShowLogin() end
+else ShowLogin() end
