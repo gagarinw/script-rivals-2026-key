@@ -1,141 +1,136 @@
--- [[ ILLIA SYSTEM V3 - FULL FUNCTIONAL ]] --
+-- [[ ILLIA SYSTEM V3 - CHAMS & WORKING AIM ]] --
 
-local API_URL = "https://script.google.com/macros/s/AKfycbyZuHTct49uHwi2Ukq3bClmQcbgSu_-y0ABZGn148EH1XbgFSTzF9MYzBxh8VKsIsMnnQ/exec"
-local HttpService = game:GetService("HttpService")
-local CoreGui = game:GetService("CoreGui")
-local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
-local Players = game:GetService("Players")
-local LocalPlayer = Players.LocalPlayer
-local Camera = workspace.CurrentCamera
-local Mouse = LocalPlayer:GetMouse()
-
--- [[ НАСТРОЙКИ ]] --
 local Settings = {
     AimbotEnabled = true,
     AimKey = "E",
     AimRadius = 150,
-    Sensitivity = 0.25,
-    ESP_Enabled = false,
+    Sensitivity = 0.2, -- Чем меньше, тем плавнее (0.1 - 0.5)
+    ESP_Enabled = true,
     ESP_Rainbow = false,
     ShowFOV = true
 }
 
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+
 local AimbotToggled = false
 local FOVCircle = Drawing.new("Circle")
 
--- [[ ФУНКЦИИ ОБНОВЛЕНИЯ FOV ]] --
-local function UpdateFOV()
-    FOVCircle.Visible = Settings.ShowFOV
-    FOVCircle.Radius = Settings.AimRadius
-    FOVCircle.Color = Color3.fromRGB(255, 255, 255)
-    FOVCircle.Thickness = 1
-    FOVCircle.Filled = false
-    FOVCircle.Transparency = 1
-    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
-end
-
--- [[ ЛОГИКА ESP ]] --
-local function CreateESP(player)
-    local Box = Drawing.new("Square")
-    Box.Visible = false
-    Box.Color = Color3.fromRGB(255, 255, 255)
-    Box.Thickness = 1
-    Box.Filled = false
-
-    local function Update()
-        local connection
-        connection = RunService.RenderStepped:Connect(function()
-            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and Settings.ESP_Enabled and player ~= LocalPlayer then
-                local pos, onScreen = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
-                if onScreen then
-                    local size = (Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position - Vector3.new(0, 3, 0)).Y - Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position + Vector3.new(0, 2.6, 0)).Y)
-                    Box.Size = Vector2.new(size * 0.6, size)
-                    Box.Position = Vector2.new(pos.X - Box.Size.X / 2, pos.Y - Box.Size.Y / 2)
-                    Box.Visible = true
-                    
-                    if Settings.ESP_Rainbow then
-                        Box.Color = Color3.fromHSV(tick() % 5 / 5, 1, 1)
-                    else
-                        Box.Color = Color3.fromRGB(255, 255, 255)
-                    end
+-- [[ ФУНКЦИЯ ПОДСВЕТКИ ТЕЛА (CHAMS) ]] --
+local function ApplyChams(player)
+    local function AddHighlight(char)
+        local hl = char:FindFirstChild("IlliaHighlight") or Instance.new("Highlight")
+        hl.Name = "IlliaHighlight"
+        hl.Parent = char
+        hl.FillTransparency = 0.5
+        hl.OutlineTransparency = 0
+        hl.Adornee = char
+        
+        RunService.RenderStepped:Connect(function()
+            if char.Parent and Settings.ESP_Enabled then
+                hl.Enabled = true
+                if Settings.ESP_Rainbow then
+                    hl.FillColor = Color3.fromHSV(tick() % 5 / 5, 1, 1)
+                    hl.OutlineColor = Color3.fromHSV(tick() % 5 / 5, 1, 1)
                 else
-                    Box.Visible = false
+                    hl.FillColor = Color3.fromRGB(0, 120, 255)
+                    hl.OutlineColor = Color3.fromRGB(255, 255, 255)
                 end
             else
-                Box.Visible = false
-                if not player.Parent then 
-                    Box:Remove()
-                    connection:Disconnect()
-                end
+                hl.Enabled = false
             end
         end)
     end
-    coroutine.wrap(Update)()
+    if player.Character then AddHighlight(player.Character) end
+    player.CharacterAdded:Connect(AddHighlight)
 end
 
-for _, v in pairs(Players:GetPlayers()) do CreateESP(v) end
-Players.PlayerAdded:Connect(CreateESP)
+for _, p in pairs(Players:GetPlayers()) do if p ~= LocalPlayer then ApplyChams(p) end end
+Players.PlayerAdded:Connect(ApplyChams)
 
--- [[ ИНТЕРФЕЙС С НОВЫМИ КНОПКАМИ ]] --
+-- [[ ЛОГИКА АИМБОТА ]] --
+local function GetClosestPlayer()
+    local target = nil
+    local dist = Settings.AimRadius
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") and p.Character:FindFirstChild("Humanoid") and p.Character.Humanoid.Health > 0 then
+            local pos, onScreen = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
+            if onScreen then
+                local magnitude = (Vector2.new(pos.X, pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
+                if magnitude < dist then
+                    target = p.Character.HumanoidRootPart
+                    dist = magnitude
+                end
+            end
+        end
+    end
+    return target
+end
+
+RunService.RenderStepped:Connect(function()
+    -- Обновление круга FOV
+    FOVCircle.Visible = Settings.ShowFOV
+    FOVCircle.Radius = Settings.AimRadius
+    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+    FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+    FOVCircle.Thickness = 1
+
+    -- Работа Аима
+    if AimbotToggled and Settings.AimbotEnabled then
+        local target = GetClosestPlayer()
+        if target then
+            local screenPos = Camera:WorldToViewportPoint(target.Position)
+            local mousePos = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+            mousemoverel((screenPos.X - mousePos.X) * Settings.Sensitivity, (screenPos.Y - mousePos.Y) * Settings.Sensitivity)
+        end
+    end
+end)
+
+-- [[ МЕНЮ ]] --
 local function BuildMenu()
-    if CoreGui:FindFirstChild("IlliaV3_Menu") then CoreGui.IlliaV3_Menu:Destroy() end
-    local Gui = Instance.new("ScreenGui", CoreGui); Gui.Name = "IlliaV3_Menu"
-    local Main = Instance.new("ScrollingFrame", Gui)
-    Main.Size = UDim2.new(0, 280, 0, 400); Main.Position = UDim2.new(0.5, -140, 0.5, -200)
+    if CoreGui:FindFirstChild("IlliaV3") then CoreGui.IlliaV3:Destroy() end
+    local Screen = Instance.new("ScreenGui", CoreGui); Screen.Name = "IlliaV3"
+    local Main = Instance.new("ScrollingFrame", Screen)
+    Main.Size = UDim2.new(0, 280, 0, 350); Main.Position = UDim2.new(0.5, -140, 0.5, -175)
     Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15); Main.AutomaticCanvasSize = "Y"; Main.CanvasSize = UDim2.new(0,0,0,0)
     Instance.new("UICorner", Main); local list = Instance.new("UIListLayout", Main); list.Padding = UDim.new(0,10); list.HorizontalAlignment = "Center"
 
-    local Title = Instance.new("TextLabel", Main); Title.Size = UDim2.new(1,0,0,45); Title.BackgroundColor3 = Color3.fromRGB(0,120,255); Title.Text = "ILLIA SYSTEM V3"
+    local Title = Instance.new("TextLabel", Main); Title.Size = UDim2.new(1,0,0,45); Title.BackgroundColor3 = Color3.fromRGB(0,120,255); Title.Text = "ILLIA SYSTEM V3"; Title.TextColor3 = Color3.new(1,1,1); Title.Font = "GothamBold"
     
-    -- АИМ ВКЛ/ВЫКЛ
-    local AimBtn = Instance.new("TextButton", Main); AimBtn.Size = UDim2.new(0.9,0,0,40); AimBtn.Text = "АИМ [E]: ВЫКЛ"
+    local function CreateBtn(txt, cb)
+        local b = Instance.new("TextButton", Main); b.Size = UDim2.new(0.9,0,0,40); b.BackgroundColor3 = Color3.fromRGB(30,30,30); b.TextColor3 = Color3.new(1,1,1); b.Text = txt; Instance.new("UICorner", b)
+        b.MouseButton1Click:Connect(function() cb(b) end)
+        return b
+    end
+
+    local AimB = CreateBtn("АИМ [E]: ВЫКЛ", function() end)
+    
+    CreateBtn("ESP (Подсветка Тела): "..(Settings.ESP_Enabled and "ВКЛ" or "ВЫКЛ"), function(b)
+        Settings.ESP_Enabled = not Settings.ESP_Enabled
+        b.Text = "ESP (Подсветка Тела): "..(Settings.ESP_Enabled and "ВКЛ" or "ВЫКЛ")
+    end)
+
+    CreateBtn("Радужное ESP: "..(Settings.ESP_Rainbow and "ВКЛ" or "ВЫКЛ"), function(b)
+        Settings.ESP_Rainbow = not Settings.ESP_Rainbow
+        b.Text = "Радужное ESP: "..(Settings.ESP_Rainbow and "ВКЛ" or "ВЫКЛ")
+    end)
+
+    CreateBtn("Показать FOV круг: "..(Settings.ShowFOV and "ВКЛ" or "ВЫКЛ"), function(b)
+        Settings.ShowFOV = not Settings.ShowFOV
+        b.Text = "Показать FOV круг: "..(Settings.ShowFOV and "ВКЛ" or "ВЫКЛ")
+    end)
+
     UserInputService.InputBegan:Connect(function(i, g)
         if not g and i.KeyCode.Name == Settings.AimKey then
             AimbotToggled = not AimbotToggled
-            AimBtn.Text = "АИМ ["..Settings.AimKey.."]: "..(AimbotToggled and "ВКЛ" or "ВЫКЛ")
-            AimBtn.TextColor3 = AimbotToggled and Color3.new(0,1,0) or Color3.new(1,1,1)
+            AimB.Text = "АИМ ["..Settings.AimKey.."]: "..(AimbotToggled and "ВКЛ" or "ВЫКЛ")
+            AimB.TextColor3 = AimbotToggled and Color3.new(0,1,0) or Color3.new(1,1,1)
         end
     end)
-
-    -- ESP КНОПКИ
-    local EspBtn = Instance.new("TextButton", Main); EspBtn.Size = UDim2.new(0.9,0,0,40); EspBtn.Text = "ESP: OFF"
-    EspBtn.MouseButton1Click:Connect(function()
-        Settings.ESP_Enabled = not Settings.ESP_Enabled
-        EspBtn.Text = "ESP: "..(Settings.ESP_Enabled and "ON" or "OFF")
-    end)
-
-    local RainbowBtn = Instance.new("TextButton", Main); RainbowBtn.Size = UDim2.new(0.9,0,0,40); RainbowBtn.Text = "Rainbow ESP: OFF"
-    RainbowBtn.MouseButton1Click:Connect(function()
-        Settings.ESP_Rainbow = not Settings.ESP_Rainbow
-        RainbowBtn.Text = "Rainbow ESP: "..(Settings.ESP_Rainbow and "ON" or "OFF")
-    end)
-
-    -- FOV КНОПКА
-    local FovBtn = Instance.new("TextButton", Main); FovBtn.Size = UDim2.new(0.9,0,0,40); FovBtn.Text = "Показать FOV: ON"
-    FovBtn.MouseButton1Click:Connect(function()
-        Settings.ShowFOV = not Settings.ShowFOV
-        FovBtn.Text = "Показать FOV: "..(Settings.ShowFOV and "ON" or "OFF")
-    end)
-
-    -- Ползунок радиуса (связан с FOV кругом)
-    local function Slider(txt, val, min, max, cb)
-        local b = Instance.new("TextButton", Main); b.Size = UDim2.new(0.9,0,0,40); b.Text = txt..": "..val
-        b.MouseButton1Click:Connect(function()
-            val = val + 50; if val > max then val = min end
-            b.Text = txt..": "..val; cb(val)
-        end)
-    end
-
-    Slider("Радиус", Settings.AimRadius, 50, 500, function(v) Settings.AimRadius = v UpdateFOV() end)
 end
-
--- [[ ЦИКЛ РАБОТЫ ]] --
-RunService.RenderStepped:Connect(function()
-    UpdateFOV()
-    if AimbotToggled then
-        -- Сюда добавь логику наводки, которую мы писали ранее
-    end
-end)
 
 BuildMenu()
