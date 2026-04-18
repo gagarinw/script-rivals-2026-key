@@ -5,27 +5,28 @@ local GEN_LINK = API_URL .. "?gen=true"
 local Settings = {
     AimbotEnabled = true,
     ESP_Enabled = true,
-    ESP_Rainbow = false, -- [🔒 ADMIN ONLY]
-    ESP_Hue = 0.6,       -- [🔒 ADMIN ONLY]
-    ShowFOV = false,     -- [🔒 ADMIN ONLY]
-    AimRadius = 140,     -- [ДОСТУПНО ВСІМ]
-    Sensitivity = 0.42,  -- [ДОСТУПНО ВСІМ]
+    ESP_Rainbow = false, -- [🔒 ADMIN]
+    ESP_Hue = 0.6,       -- [🔒 ADMIN]
+    ShowFOV = false,     -- [🔒 ADMIN]
+    AimRadius = 140,
+    Sensitivity = 0.4, 
     AimPart = "Head",
-    MenuKey = Enum.KeyCode.Insert,
-    ToggleKey = Enum.KeyCode.E
+    MenuKey = Enum.KeyCode.Insert
 }
 
--- [[ СЕРВІСИ ]] --
+-- [[ СЕРВИСЫ ]] --
 local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
+local Mouse = LocalPlayer:GetMouse()
 local Camera = workspace.CurrentCamera
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 
-local AimbotActive = false
 local IsAdmin = false 
+local AimbotTarget = nil
 
+-- [[ ЦВЕТА ]] --
 local Colors = {
     MainBlue = Color3.fromRGB(0, 100, 255),
     DarkBlue = Color3.fromRGB(0, 35, 100),
@@ -36,7 +37,7 @@ local Colors = {
     TitleBar = Color3.fromRGB(25, 25, 25)
 }
 
--- [[ ПЕРЕВІРКА КЛЮЧА ]] --
+-- [[ ФУНКЦИЯ ПРОВЕРКИ КЛЮЧА ]] --
 local function VerifyKeyRemote(input)
     local success, result = pcall(function()
         return game:HttpGet(API_URL .. "?check=" .. tostring(input))
@@ -44,14 +45,16 @@ local function VerifyKeyRemote(input)
     if success then
         if result == "admin" then IsAdmin = true return "ok"
         elseif result == "valid" then IsAdmin = false return "ok"
-        elseif result == "expired_or_used" then return "used" end
+        end
     end
     return "fail"
 end
 
--- [[ ІНТЕРФЕЙС ВХОДУ ]] --
+-- [[ ИНТЕРФЕЙС ВХОДА ]] --
 if CoreGui:FindFirstChild("IlliaSystemV3") then CoreGui.IlliaSystemV3:Destroy() end
 local MainSystemGui = Instance.new("ScreenGui", CoreGui)
+MainSystemGui.Name = "IlliaSystemV3"
+
 local BG = Instance.new("Frame", MainSystemGui)
 BG.Size = UDim2.new(1, 0, 1, 0)
 BG.BackgroundColor3 = Colors.Background
@@ -70,41 +73,36 @@ LTitle.Font = Enum.Font.GothamBold
 LTitle.TextSize = 35
 LTitle.BackgroundTransparency = 1
 
-local KeyContainer = Instance.new("Frame", Center)
-KeyContainer.Size = UDim2.new(1, 0, 0, 160)
-KeyContainer.Position = UDim2.new(0, 0, 0.45, 0)
-KeyContainer.BackgroundTransparency = 1
-
-local KeyInput = Instance.new("TextBox", KeyContainer)
-KeyInput.Size = UDim2.new(0.85, 0, 0, 40)
-KeyInput.Position = UDim2.new(0.075, 0, 0, 0)
-KeyInput.PlaceholderText = "Введіть ключ..."
+local KeyInput = Instance.new("TextBox", Center)
+KeyInput.Size = UDim2.new(0.8, 0, 0, 40)
+KeyInput.Position = UDim2.new(0.1, 0, 0.35, 0)
+KeyInput.PlaceholderText = "Введите ключ..."
 KeyInput.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 KeyInput.TextColor3 = Color3.new(1, 1, 1)
 Instance.new("UICorner", KeyInput)
 
-local KeyBtn = Instance.new("TextButton", KeyContainer)
-KeyBtn.Size = UDim2.new(0.85, 0, 0, 45)
-KeyBtn.Position = UDim2.new(0.075, 0, 0.35, 0)
+local KeyBtn = Instance.new("TextButton", Center)
+KeyBtn.Size = UDim2.new(0.8, 0, 0, 45)
+KeyBtn.Position = UDim2.new(0.1, 0, 0.55, 0)
 KeyBtn.BackgroundColor3 = Colors.MainBlue
-KeyBtn.Text = "ПЕРЕВІРИТИ КЛЮЧ"
+KeyBtn.Text = "ПРОВЕРИТЬ КЛЮЧ"
 KeyBtn.TextColor3 = Color3.new(1, 1, 1)
 KeyBtn.Font = Enum.Font.GothamBold
 Instance.new("UICorner", KeyBtn)
 
-local GetKeyBtn = Instance.new("TextButton", KeyContainer)
-GetKeyBtn.Size = UDim2.new(0.85, 0, 0, 40)
-GetKeyBtn.Position = UDim2.new(0.075, 0, 0.7, 0)
-GetKeyBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-GetKeyBtn.Text = "ОТРИМАТИ КЛЮЧ (COPY LINK)"
-GetKeyBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
-Instance.new("UICorner", GetKeyBtn)
+local CopyBtn = Instance.new("TextButton", Center)
+CopyBtn.Size = UDim2.new(0.8, 0, 0, 30)
+CopyBtn.Position = UDim2.new(0.1, 0, 0.75, 0)
+CopyBtn.BackgroundTransparency = 1
+CopyBtn.Text = "Скопировать ссылку на ключ"
+CopyBtn.TextColor3 = Color3.new(0.7, 0.7, 0.7)
+CopyBtn.TextSize = 14
 
-GetKeyBtn.MouseButton1Click:Connect(function()
+CopyBtn.MouseButton1Click:Connect(function()
     setclipboard(GEN_LINK)
-    GetKeyBtn.Text = "СКОПІЙОВАНО!"
-    task.wait(2)
-    GetKeyBtn.Text = "ОТРИМАТИ КЛЮЧ (COPY LINK)"
+    CopyBtn.Text = "СКОПИРОВАНО!"
+    task.wait(1)
+    CopyBtn.Text = "Скопировать ссылку на ключ"
 end)
 
 -- [[ МЕНЮ ЧИТА ]] --
@@ -112,32 +110,31 @@ local MainGui = Instance.new("ScreenGui", CoreGui)
 MainGui.Enabled = false
 local MainFrame = Instance.new("Frame", MainGui)
 MainFrame.BackgroundColor3 = Colors.Background
-MainFrame.Size = UDim2.new(0, 280, 0, 500)
-MainFrame.Position = UDim2.new(0.5, -140, 0.5, -250)
+MainFrame.Size = UDim2.new(0, 280, 0, 450)
+MainFrame.Position = UDim2.new(0.5, -140, 0.5, -225)
 MainFrame.Active = true
 MainFrame.Draggable = true
 Instance.new("UICorner", MainFrame)
 
 local Title = Instance.new("TextLabel", MainFrame)
-Title.Size = UDim2.new(1, 0, 0, 50)
-Title.Text = "ILLIA V3"
-Title.TextColor3 = Color3.new(1, 1, 1)
+Title.Size = UDim2.new(1, 0, 0, 40)
 Title.BackgroundColor3 = Colors.TitleBar
-Title.Font = Enum.Font.GothamBold
+Title.TextColor3 = Color3.new(1, 1, 1)
+Title.TextSize = 18
+Title.Text = "ILLIA V3"
 Instance.new("UICorner", Title)
 
 local UIList = Instance.new("UIListLayout", MainFrame)
-UIList.Padding = UDim.new(0, 8)
+UIList.Padding = UDim.new(0, 5)
 UIList.HorizontalAlignment = Enum.HorizontalAlignment.Center
-Instance.new("Frame", MainFrame).Size = UDim2.new(1,0,0,50)
 
--- УНІВЕРСАЛЬНА ФУНКЦІЯ ДЛЯ ПЕРЕМИКАЧІВ
+-- Функции для кнопок
 local function AddToggle(text, prop, adminOnly)
     local btn = Instance.new("TextButton", MainFrame)
-    btn.Size = UDim2.new(0.9, 0, 0, 38)
+    btn.Size = UDim2.new(0.9, 0, 0, 35)
     btn.Font = Enum.Font.GothamBold
     btn.TextSize = 13
-    btn.TextColor3 = Color3.new(1, 1, 1)
+    btn.TextColor3 = Color3.new(1,1,1)
     
     local function update()
         if adminOnly and not IsAdmin then
@@ -148,13 +145,8 @@ local function AddToggle(text, prop, adminOnly)
             btn.BackgroundColor3 = Settings[prop] and Colors.DarkBlue or Colors.Purple
         end
     end
-
     btn.MouseButton1Click:Connect(function()
-        if adminOnly and not IsAdmin then
-            btn.Text = "ONLY FOR ADMINS!"
-            task.wait(1)
-            update()
-        else
+        if not (adminOnly and not IsAdmin) then
             Settings[prop] = not Settings[prop]
             update()
         end
@@ -163,92 +155,99 @@ local function AddToggle(text, prop, adminOnly)
     Instance.new("UICorner", btn)
 end
 
--- УНИВЕРСАЛЬНА ФУНКЦІЯ ДЛЯ СЛАЙДЕРІВ/ВИБОРУ
-local function AddOption(text, prop, min, max, adminOnly)
-    local btn = Instance.new("TextButton", MainFrame)
-    btn.Size = UDim2.new(0.9, 0, 0, 38)
-    btn.Font = Enum.Font.GothamBold
-    btn.TextSize = 13
-    btn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("Frame", MainFrame).Size = UDim2.new(1,0,0,45) -- Отступ
+AddToggle("Aimbot", "AimbotEnabled", false)
+AddToggle("ESP (Players)", "ESP_Enabled", false)
+AddToggle("Rainbow ESP", "ESP_Rainbow", true)
+AddToggle("Show FOV", "ShowFOV", true)
 
-    local function update()
-        if adminOnly and not IsAdmin then
-            btn.Text = text .. " [🔒 ADMIN]"
-            btn.BackgroundColor3 = Colors.LockedGrey
-        else
-            btn.Text = text .. ": " .. tostring(Settings[prop])
-            btn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-        end
-    end
-
-    btn.MouseButton1Click:Connect(function()
-        if adminOnly and not IsAdmin then
-            btn.Text = "ONLY FOR ADMINS!"
-            task.wait(1)
-            update()
-        else
-            if Settings[prop] >= max then Settings[prop] = min else Settings[prop] = Settings[prop] + (max-min)/5 end
-            Settings[prop] = math.round(Settings[prop] * 100) / 100
-            update()
-        end
-    end)
-    update()
-    Instance.new("UICorner", btn)
-end
-
--- [[ СПИСОК ФУНКЦІЙ ]] --
-AddToggle("ESP Players", "ESP_Enabled", false)       -- Всім
-AddToggle("ESP Rainbow", "ESP_Rainbow", true)        -- АДМІН
-AddOption("ESP Color (Hue)", "ESP_Hue", 0.1, 1, true) -- АДМІН
-AddToggle("Show FOV Circle", "ShowFOV", true)        -- АДМІН
-AddOption("FOV Radius", "AimRadius", 50, 400, false)  -- Всім
-AddOption("Aim Speed", "Sensitivity", 0.1, 1.5, false)-- Всім
-AddToggle("Aimbot Master", "AimbotEnabled", false)   -- Всім
-
--- [[ ЛОГІКА ВХОДУ ]] --
-KeyBtn.MouseButton1Click:Connect(function()
-    KeyBtn.Text = "ПЕРЕВІРКА..."
-    local status = VerifyKeyRemote(KeyInput.Text)
-    if status == "ok" then
-        KeyBtn.Text = "УСПІШНО"
-        task.wait(0.5)
-        MainSystemGui:Destroy()
-        if IsAdmin then Title.Text = "ILLIA V3 [ADMIN]" end
-        MainGui.Enabled = true
-    else
-        KeyBtn.Text = "ПОМИЛКА КЛЮЧА"
-        task.wait(1)
-        KeyBtn.Text = "ПЕРЕВІРИТИ КЛЮЧ"
-    end
-end)
-
--- [[ ОСНОВНИЙ ЦИКЛ ]] --
-local FOVCircle = Drawing.new("Circle")
-FOVCircle.Thickness = 1.5
-
-RunService.RenderStepped:Connect(function()
-    if not MainGui.Enabled then FOVCircle.Visible = false return end
+-- [[ ЛОГИКА АИМБОТА ]] --
+local function GetClosestPlayer()
+    local target = nil
+    local dist = Settings.AimRadius
     
-    FOVCircle.Visible = Settings.ShowFOV
-    FOVCircle.Radius = Settings.AimRadius
-    FOVCircle.Position = UserInputService:GetMouseLocation()
-    FOVCircle.Color = Color3.new(1,1,1)
-
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local h = p.Character:FindFirstChild("ILLIA_ESP")
-            if Settings.ESP_Enabled then
-                if not h then h = Instance.new("Highlight", p.Character) h.Name = "ILLIA_ESP" end
-                h.Enabled = true
-                -- Колір та Веселка доступні тільки адмінам (через зміну Settings)
-                h.FillColor = Settings.ESP_Rainbow and Color3.fromHSV((tick() * 0.5) % 1, 0.8, 1) or Color3.fromHSV(Settings.ESP_Hue, 0.8, 1)
-            elseif h then
-                h.Enabled = false
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild(Settings.AimPart) and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
+            local pos, onScreen = Camera:WorldToViewportPoint(v.Character[Settings.AimPart].Position)
+            if onScreen then
+                local magnitude = (Vector2.new(pos.X, pos.Y) - UserInputService:GetMouseLocation()).Magnitude
+                if magnitude < dist then
+                    target = v
+                    dist = magnitude
+                end
             end
         end
     end
+    return target
+end
+
+-- [[ КРУГ FOV ]] --
+local FOVCircle = Drawing.new("Circle")
+FOVCircle.Thickness = 1
+FOVCircle.Color = Color3.new(1, 1, 1)
+FOVCircle.Filled = false
+
+-- [[ ГЛАВНЫЙ ЦИКЛ ]] --
+RunService.RenderStepped:Connect(function()
+    if not MainGui.Enabled then 
+        FOVCircle.Visible = false 
+        return 
+    end
+
+    -- Настройка FOV
+    FOVCircle.Visible = Settings.ShowFOV
+    FOVCircle.Radius = Settings.AimRadius
+    FOVCircle.Position = UserInputService:GetMouseLocation()
+
+    -- Логика ESP
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer then
+            if p.Character and Settings.ESP_Enabled then
+                local highlight = p.Character:FindFirstChild("IlliaHighlight")
+                if not highlight then
+                    highlight = Instance.new("Highlight")
+                    highlight.Name = "IlliaHighlight"
+                    highlight.Parent = p.Character
+                end
+                highlight.Enabled = true
+                highlight.FillColor = Settings.ESP_Rainbow and Color3.fromHSV((tick() * 0.5) % 1, 0.8, 1) or Color3.fromHSV(Settings.ESP_Hue, 0.8, 1)
+                highlight.FillTransparency = 0.5
+                highlight.OutlineColor = Color3.new(1,1,1)
+            else
+                if p.Character and p.Character:FindFirstChild("IlliaHighlight") then
+                    p.Character.IlliaHighlight.Enabled = false
+                end
+            end
+        end
+    end
+
+    -- Логика Аимбота (нажатие правой кнопки мыши)
+    if Settings.AimbotEnabled and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+        local target = GetClosestPlayer()
+        if target and target.Character then
+            local targetPos = target.Character[Settings.AimPart].Position
+            Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, targetPos), Settings.Sensitivity)
+        end
+    end
 end)
 
-UserInputService.InputBegan:Connect(function(i, g)
-    if i.KeyCode == Settings.MenuKey and MainGui.Enabled then MainFrame.Visible = not MainFrame.Visible end
+-- Логика входа
+KeyBtn.MouseButton1Click:Connect(function()
+    KeyBtn.Text = "Проверка..."
+    local res = VerifyKeyRemote(KeyInput.Text)
+    if res == "ok" then
+        if IsAdmin then Title.Text = "ILLIA V3 [ADMIN]" end
+        MainSystemGui:Destroy()
+        MainGui.Enabled = true
+    else
+        KeyBtn.Text = "НЕВЕРНЫЙ КЛЮЧ"
+        task.wait(1)
+        KeyBtn.Text = "ПРОВЕРИТЬ КЛЮЧ"
+    end
+end)
+
+UserInputService.InputBegan:Connect(function(input)
+    if input.KeyCode == Settings.MenuKey and MainGui.Enabled then
+        MainFrame.Visible = not MainFrame.Visible
+    end
 end)
