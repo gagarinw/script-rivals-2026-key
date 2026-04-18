@@ -1,4 +1,4 @@
--- [[ ILLIA SYSTEM V3 - NEW COLORS & TOGGLE AIM ]] --
+-- [[ ILLIA SYSTEM V3 - TOGGLE AIMBOT & SAVE SETTINGS ]] --
 
 local API_URL = "https://script.google.com/macros/s/AKfycbyZuHTct49uHwi2Ukq3bClmQcbgSu_-y0ABZGn148EH1XbgFSTzF9MYzBxh8VKsIsMnnQ/exec"
 local HttpService = game:GetService("HttpService")
@@ -14,101 +14,137 @@ local KEY_FILE = "illia_v3_key.txt"
 local SETTINGS_FILE = "illia_v3_settings.json"
 local canSave = (isfile and writefile and readfile)
 
--- [[ ЦВЕТОВАЯ ПАЛИТРА (ПО ТВОЕМУ ЗАПРОСУ) ]] --
-local Colors = {
-    MainBG = Color3.fromRGB(0, 0, 255),       -- Синий фон
-    Button = Color3.fromRGB(128, 0, 128),     -- Фиолетовые кнопки
-    DarkButton = Color3.fromRGB(0, 0, 139),   -- Темно-синие кнопки
-    White = Color3.fromRGB(255, 255, 255)
-}
-
+-- [[ НАСТРОЙКИ ]] --
 local Settings = {
     AimbotEnabled = true,
-    AimKey = "E",
+    AimKey = "E", -- Твой выбор
     AimRadius = 150,
-    Sensitivity = 0.25
+    Sensitivity = 0.25,
+    TeamCheck = true
 }
 
 local IsAdmin = false
 local ExpiryTimestamp = 0
-local AimbotToggled = false -- Режим вкл/выкл
+local AimbotToggled = false -- Состояние вкл/выкл
 
--- [[ СОХРАНЕНИЕ ]] --
+-- [[ ФУНКЦИИ СОХРАНЕНИЯ ]] --
 local function SaveSettings()
-    if canSave then writefile(SETTINGS_FILE, HttpService:JSONEncode(Settings)) end
+    if canSave then
+        writefile(SETTINGS_FILE, HttpService:JSONEncode(Settings))
+    end
 end
 
 local function LoadSettings()
     if canSave and isfile(SETTINGS_FILE) then
-        local ok, data = pcall(function() return HttpService:JSONDecode(readfile(SETTINGS_FILE)) end)
-        if ok then for k, v in pairs(data) do Settings[k] = v end end
+        local success, data = pcall(function() return HttpService:JSONDecode(readfile(SETTINGS_FILE)) end)
+        if success then
+            for k, v in pairs(data) do Settings[k] = v end
+        end
     end
 end
 
--- [[ АВТОРИЗАЦИЯ ]] --
+-- [[ ЛОГИКА АВТОРИЗАЦИИ ]] --
 local function VerifyKey(key)
-    local ok, res = pcall(function() 
+    local success, result = pcall(function() 
         return game:HttpGet(API_URL .. "?check=" .. key .. "&hwid=" .. HWID) 
     end)
-    if ok then
-        if res == "admin" then IsAdmin = true return "ok"
-        elseif res:find("valid") then
-            local p = string.split(res, "|")
-            ExpiryTimestamp = tonumber(p[2]) or 0
+
+    if success then
+        if result == "admin" then
+            IsAdmin = true
+            return "ok"
+        elseif result:find("valid") then
+            local parts = string.split(result, "|")
+            ExpiryTimestamp = tonumber(parts[2]) or 0
             IsAdmin = false
             return "ok"
         end
     end
-    return "Ошибка"
+    return "Неверный ключ"
 end
 
--- [[ ИНТЕРФЕЙС ]] --
+-- [[ ОСНОВНОЕ МЕНЮ ]] --
 local function BuildMenu()
     local Gui = Instance.new("ScreenGui", CoreGui)
     local Main = Instance.new("Frame", Gui)
-    Main.Size = UDim2.new(0, 280, 0, 350); Main.Position = UDim2.new(0.5, -140, 0.5, -175)
-    Main.BackgroundColor3 = Colors.MainBG; Instance.new("UICorner", Main)
+    Main.Size = UDim2.new(0, 260, 0, 300); Main.Position = UDim2.new(0.5, -130, 0.5, -150)
+    Main.BackgroundColor3 = Color3.fromRGB(15,15,15); Instance.new("UICorner", Main)
 
     local Title = Instance.new("TextLabel", Main)
-    Title.Size = UDim2.new(1, 0, 0, 45); Title.Text = "ILLIA SYSTEM V3"
-    Title.BackgroundColor3 = Colors.DarkButton; Title.TextColor3 = Colors.White
+    Title.Size = UDim2.new(1, 0, 0, 40); Title.TextColor3 = Color3.new(1,1,1)
+    Title.Text = IsAdmin and "👑 ADMIN" or "👤 USER"
+    Title.BackgroundColor3 = IsAdmin and Color3.fromRGB(255, 180, 0) or Color3.fromRGB(0, 120, 255)
     Instance.new("UICorner", Title)
 
-    -- Кнопка Аима (Фиолетовая)
-    local AimBtn = Instance.new("TextButton", Main)
-    AimBtn.Size = UDim2.new(0.9, 0, 0, 45); AimBtn.Position = UDim2.new(0.05, 0, 0.25, 0)
-    AimBtn.BackgroundColor3 = Colors.Button
-    AimBtn.TextColor3 = Colors.White
+    local StatusLabel = Instance.new("TextLabel", Main)
+    StatusLabel.Size = UDim2.new(1, 0, 0, 40); StatusLabel.Position = UDim2.new(0, 0, 0.2, 0)
+    StatusLabel.BackgroundTransparency = 1; StatusLabel.TextColor3 = Color3.new(1,1,1)
     
+    -- Цикл обновления статуса
     task.spawn(function()
         while Gui.Parent do
-            AimBtn.Text = "AIMBOT ["..Settings.AimKey.."]: "..(AimbotToggled and "ON" or "OFF")
-            AimBtn.TextColor3 = AimbotToggled and Color3.new(0,1,0) or Colors.White
+            local stateText = AimbotToggled and "ВКЛЮЧЕН" or "ВЫКЛЮЧЕН"
+            local stateColor = AimbotToggled and Color3.new(0, 1, 0) or Color3.new(1, 0, 0)
+            StatusLabel.Text = "АИМ [" .. Settings.AimKey .. "]: " .. stateText
+            StatusLabel.TextColor3 = stateColor
             task.wait(0.1)
         end
     end)
-
-    -- Кнопка выхода (Темно-синяя)
-    local ExitBtn = Instance.new("TextButton", Main)
-    ExitBtn.Size = UDim2.new(0.9, 0, 0, 40); ExitBtn.Position = UDim2.new(0.05, 0, 0.8, 0)
-    ExitBtn.BackgroundColor3 = Colors.DarkButton
-    ExitBtn.Text = "LOGOUT"; ExitBtn.TextColor3 = Colors.White
-    ExitBtn.MouseButton1Click:Connect(function()
-        if canSave then pcall(function() delfile(KEY_FILE) end) end
-        Gui:Destroy()
-    end)
 end
 
--- [[ ЛОГИКА АИМА ]] --
-UserInputService.InputBegan:Connect(function(i, g)
-    if not g and i.KeyCode.Name == Settings.AimKey then
-        AimbotToggled = not AimbotToggled
+-- [[ ЛОГИКА АИМБОТА ]] --
+local function GetClosestPlayer()
+    local closest = nil
+    local maxDist = Settings.AimRadius
+
+    for _, v in pairs(Players:GetPlayers()) do
+        if v ~= LocalPlayer and v.Character and v.Character:FindFirstChild("HumanoidRootPart") and v.Character:FindFirstChild("Humanoid") and v.Character.Humanoid.Health > 0 then
+            -- Team Check
+            if Settings.TeamCheck and v.Team == LocalPlayer.Team then continue end
+            
+            local pos, onScreen = Camera:WorldToViewportPoint(v.Character.HumanoidRootPart.Position)
+            if onScreen then
+                local dist = (Vector2.new(pos.X, pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
+                if dist < maxDist then
+                    closest = v.Character.HumanoidRootPart
+                    maxDist = dist
+                end
+            end
+        end
+    end
+    return closest
+end
+
+RunService.RenderStepped:Connect(function()
+    if AimbotToggled and Settings.AimbotEnabled then
+        local target = GetClosestPlayer()
+        if target then
+            local targetPos = Camera:WorldToViewportPoint(target.Position)
+            mousemoverel(
+                (targetPos.X - Camera.ViewportSize.X/2) * Settings.Sensitivity,
+                (targetPos.Y - Camera.ViewportSize.Y/2) * Settings.Sensitivity
+            )
+        end
     end
 end)
 
--- Тут должен быть твой код для GetClosestPlayer и RenderStepped (из прошлого сообщения)
+-- [[ ОБРАБОТКА НАЖАТИЯ (ВКЛ/ВЫКЛ) ]] --
+UserInputService.InputBegan:Connect(function(input, g)
+    if not g and input.KeyCode.Name == Settings.AimKey then
+        AimbotToggled = not AimbotToggled -- Переключаем режим
+    end
+end)
 
--- [[ ЗАПУСК ]] --
+-- [[ СТАРТ ]] --
 LoadSettings()
--- Проверка ключа и вызов BuildMenu()
-BuildMenu()
+local function ShowLogin()
+    -- (Твой старый код окна логина, вызывающий BuildMenu при успехе)
+    -- Для теста просто запустим меню:
+    BuildMenu()
+end
+
+if canSave and isfile(KEY_FILE) then
+    if VerifyKey(readfile(KEY_FILE)) == "ok" then BuildMenu() else ShowLogin() end
+else
+    ShowLogin()
+end
