@@ -1,6 +1,6 @@
 -- [[ ILLIA SYSTEM V3 - LOGIN STATUS UPDATE ]] --
 
-local API_URL = "https://script.google.com/macros/s/AKfycbyeA-rWBrLS6otVeDtjQvSf3Dfu_0OhX3BHFdq-4M42OYz6aDUy71BO7gARj-fsySztgQ/exec"
+local API_URL = "https://script.google.com/macros/s/AKfycbxTTCu4s6HkyrizJDhwAWDbB2KIQsfFLeM8QRjGld74BRjKmiHPnOoPGkJ-OL-U1yoc6g/exec"
 local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
 
