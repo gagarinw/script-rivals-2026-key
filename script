@@ -1,4 +1,4 @@
--- [[ ILLIA SYSTEM V3 - FINAL VERSION ]] --
+-- [[ ILLIA SYSTEM V3 - FULL FIX & SLIDERS ]] --
 
 local API_URL = "https://script.google.com/macros/s/AKfycbyZuHTct49uHwi2Ukq3bClmQcbgSu_-y0ABZGn148EH1XbgFSTzF9MYzBxh8VKsIsMnnQ/exec"
 local HttpService = game:GetService("HttpService")
@@ -11,43 +11,41 @@ local Camera = workspace.CurrentCamera
 local HWID = game:GetService("RbxAnalyticsService"):GetClientId()
 
 local Settings = {
-    AimbotEnabled = true,
     AimKey = "E",
     AimRadius = 150,
     Sensitivity = 0.2,
     ESP_Enabled = true,
     ESP_Color = Color3.fromRGB(0, 120, 255),
-    ESP_Rainbow = false,
     ShowFOV = true
 }
 
 local AimbotToggled = false
 local FOVCircle = Drawing.new("Circle")
 
--- [[ ФУНКЦИЯ ПОЛЗУНКА ]] --
+-- [[ ЛОГИКА ПОЛЗУНКОВ ]] --
 local function CreateSlider(parent, text, min, max, default, isColor, callback)
     local Frame = Instance.new("Frame", parent)
-    Frame.Size = UDim2.new(0.9, 0, 0, 45); Frame.BackgroundTransparency = 1
+    Frame.Size = UDim2.new(0.9, 0, 0, 50); Frame.BackgroundTransparency = 1
     
     local Label = Instance.new("TextLabel", Frame)
-    Label.Size = UDim2.new(1, 0, 0, 20); Label.Text = text; Label.TextColor3 = Color3.new(1,1,1); Label.BackgroundTransparency = 1; Label.Font = "Gotham"
+    Label.Size = UDim2.new(1, 0, 0, 20); Label.Text = text; Label.TextColor3 = Color3.new(1,1,1); Label.BackgroundTransparency = 1; Label.Font = "GothamBold"; Label.TextSize = 12
 
     local Bar = Instance.new("Frame", Frame)
-    Bar.Size = UDim2.new(1, 0, 0, 6); Bar.Position = UDim2.new(0, 0, 0.7, 0); Bar.BackgroundColor3 = Color3.fromRGB(40,40,40); Instance.new("UICorner", Bar)
+    Bar.Size = UDim2.new(1, 0, 0, 8); Bar.Position = UDim2.new(0, 0, 0.6, 0); Bar.BackgroundColor3 = Color3.fromRGB(40,40,40); Instance.new("UICorner", Bar)
 
     local Fill = Instance.new("Frame", Bar)
     Fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0); Fill.BackgroundColor3 = isColor and Color3.fromHSV(0, 1, 1) or Color3.fromRGB(0, 120, 255); Instance.new("UICorner", Fill)
 
-    local Btn = Instance.new("TextButton", Bar); Btn.Size = UDim2.new(1,0,1,0); Btn.BackgroundTransparency = 1; Btn.Text = ""
+    local Trigger = Instance.new("TextButton", Bar); Trigger.Size = UDim2.new(1,0,1,0); Trigger.BackgroundTransparency = 1; Trigger.Text = ""
 
     local function Update(input)
         local per = math.clamp((input.Position.X - Bar.AbsolutePosition.X) / Bar.AbsoluteSize.X, 0, 1)
         Fill.Size = UDim2.new(per, 0, 1, 0)
         local val = min + (max - min) * per
         if isColor then
-            Settings.ESP_Color = Color3.fromHSV(per, 1, 1)
-            Fill.BackgroundColor3 = Settings.ESP_Color
-            callback(Settings.ESP_Color)
+            local color = Color3.fromHSV(per, 1, 1)
+            Fill.BackgroundColor3 = color
+            callback(color)
         else
             val = math.round(val * 100) / 100
             Label.Text = text .. ": " .. val
@@ -56,12 +54,12 @@ local function CreateSlider(parent, text, min, max, default, isColor, callback)
     end
 
     local drag = false
-    Btn.MouseButton1Down:Connect(function() drag = true end)
+    Trigger.MouseButton1Down:Connect(function() drag = true end)
     UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false end end)
     UserInputService.InputChanged:Connect(function(i) if drag and i.UserInputType == Enum.UserInputType.MouseMovement then Update(i) end end)
 end
 
--- [[ АИМ И ESP ]] --
+-- [[ АИМ И ХАЙЛАЙТЫ ]] --
 local function GetClosest()
     local t = nil; local d = Settings.AimRadius
     for _, p in pairs(Players:GetPlayers()) do
@@ -76,12 +74,12 @@ local function GetClosest()
     return t
 end
 
-local function ApplyChams(char)
-    local hl = Instance.new("Highlight", char)
-    hl.FillTransparency = 0.5; hl.OutlineTransparency = 0
+local function ApplyESP(char)
+    local hl = char:FindFirstChild("IlliaHL") or Instance.new("Highlight", char)
+    hl.Name = "IlliaHL"; hl.FillTransparency = 0.5; hl.OutlineTransparency = 0
     RunService.RenderStepped:Connect(function()
         hl.Enabled = Settings.ESP_Enabled
-        hl.FillColor = Settings.ESP_Rainbow and Color3.fromHSV(tick()%5/5,1,1) or Settings.ESP_Color
+        hl.FillColor = Settings.ESP_Color
     end)
 end
 
@@ -89,20 +87,20 @@ end
 local function BuildMenu()
     local Gui = Instance.new("ScreenGui", CoreGui); Gui.Name = "IlliaV3"
     local Main = Instance.new("ScrollingFrame", Gui)
-    Main.Size = UDim2.new(0, 300, 0, 400); Main.Position = UDim2.new(0.5, -150, 0.5, -200)
-    Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15); Main.AutomaticCanvasSize = "Y"; Main.ScrollBarThickness = 2
-    Instance.new("UIListLayout", Main).HorizontalAlignment = "Center"
+    Main.Size = UDim2.new(0, 300, 0, 420); Main.Position = UDim2.new(0.5, -150, 0.5, -210)
+    Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15); Main.AutomaticCanvasSize = "Y"; Main.CanvasSize = UDim2.new(0,0,0,0); Main.ScrollBarThickness = 0
+    Instance.new("UICorner", Main); local list = Instance.new("UIListLayout", Main); list.Padding = UDim.new(0,10); list.HorizontalAlignment = "Center"
 
     local Title = Instance.new("TextLabel", Main); Title.Size = UDim2.new(1,0,0,50); Title.BackgroundColor3 = Color3.fromRGB(0,120,255); Title.Text = "ILLIA SYSTEM V3"; Title.TextColor3 = Color3.new(1,1,1); Title.Font = "GothamBold"
 
     local AimB = Instance.new("TextButton", Main); AimB.Size = UDim2.new(0.9,0,0,45); AimB.Text = "АИМ [E]: ВЫКЛ"; AimB.BackgroundColor3 = Color3.fromRGB(30,30,30); AimB.TextColor3 = Color3.new(1,1,1); Instance.new("UICorner", AimB)
 
-    CreateSlider(Main, "Цвет ESP (Hue)", 0, 1, 0.6, true, function() end)
-    CreateSlider(Main, "Размер FOV", 50, 400, Settings.AimRadius, false, function(v) Settings.AimRadius = v end)
-    CreateSlider(Main, "Скорость наводки", 0.05, 0.65, Settings.Sensitivity, false, function(v) Settings.Sensitivity = v end)
+    CreateSlider(Main, "Цвет ESP (Радуга)", 0, 1, 0.6, true, function(c) Settings.ESP_Color = c end)
+    CreateSlider(Main, "Радиус FOV", 50, 400, Settings.AimRadius, false, function(v) Settings.AimRadius = v end)
+    CreateSlider(Main, "Сенса (Скорость)", 0.01, 0.65, Settings.Sensitivity, false, function(v) Settings.Sensitivity = v end)
 
-    local EspBtn = Instance.new("TextButton", Main); EspBtn.Size = UDim2.new(0.9,0,0,40); EspBtn.Text = "ESP: ВКЛ"
-    EspBtn.MouseButton1Click:Connect(function() Settings.ESP_Enabled = not Settings.ESP_Enabled EspBtn.Text = "ESP: "..(Settings.ESP_Enabled and "ВКЛ" or "ВЫКЛ") end)
+    local fovT = Instance.new("TextButton", Main); fovT.Size = UDim2.new(0.9,0,0,40); fovT.Text = "Показать FOV: ВКЛ"
+    fovT.MouseButton1Click:Connect(function() Settings.ShowFOV = not Settings.ShowFOV fovT.Text = "Показать FOV: "..(Settings.ShowFOV and "ВКЛ" or "ВЫКЛ") end)
 
     UserInputService.InputBegan:Connect(function(i, g)
         if not g and i.KeyCode.Name == Settings.AimKey then
@@ -113,35 +111,38 @@ local function BuildMenu()
     end)
 end
 
--- [[ ЛОГИН ]] --
+-- [[ ОКНО ПРОВЕРКИ КЛЮЧА ]] --
 local function ShowLogin()
     local Auth = Instance.new("ScreenGui", CoreGui)
-    local Box = Instance.new("Frame", Auth); Box.Size = UDim2.new(0, 300, 0, 160); Box.Position = UDim2.new(0.5,-150,0.5,-80); Box.BackgroundColor3 = Color3.fromRGB(25,25,25)
-    local Inp = Instance.new("TextBox", Box); Inp.Size = UDim2.new(0.8,0,0,40); Inp.Position = UDim2.new(0.1,0,0.2,0); Inp.PlaceholderText = "Введите ключ..."
-    local Go = Instance.new("TextButton", Box); Go.Size = UDim2.new(0.8,0,0,40); Go.Position = UDim2.new(0.1,0,0.6,0); Go.Text = "ВОЙТИ"
+    local Box = Instance.new("Frame", Auth); Box.Size = UDim2.new(0, 300, 0, 180); Box.Position = UDim2.new(0.5,-150,0.5,-90); Box.BackgroundColor3 = Color3.fromRGB(20,20,20); Instance.new("UICorner", Box)
+    local Inp = Instance.new("TextBox", Box); Inp.Size = UDim2.new(0.8,0,0,40); Inp.Position = UDim2.new(0.1,0,0.25,0); Inp.PlaceholderText = "Введите ваш ключ..."; Inp.BackgroundColor3 = Color3.fromRGB(35,35,35); Inp.TextColor3 = Color3.new(1,1,1)
+    local Go = Instance.new("TextButton", Box); Go.Size = UDim2.new(0.8,0,0,45); Go.Position = UDim2.new(0.1,0,0.6,0); Go.Text = "АВТОРИЗАЦИЯ"; Go.BackgroundColor3 = Color3.fromRGB(0,120,255); Go.TextColor3 = Color3.new(1,1,1); Instance.new("UICorner", Go)
+    
     Go.MouseButton1Click:Connect(function()
         local ok, res = pcall(function() return game:HttpGet(API_URL.."?check="..Inp.Text.."&hwid="..HWID) end)
-        if ok and (res == "admin" or res:find("valid")) then Auth:Destroy(); BuildMenu() else Inp.Text = "НЕВЕРНО" end
+        if ok and (res == "admin" or res:find("valid")) then Auth:Destroy(); BuildMenu() else Inp.Text = ""; Inp.PlaceholderText = "НЕВЕРНЫЙ КЛЮЧ!" end
     end)
 end
 
--- [[ ЦИКЛ ОБНОВЛЕНИЯ ]] --
+-- [[ ЦИКЛ ОБНОВЛЕНИЯ (FOV И АИМ) ]] --
 RunService.RenderStepped:Connect(function()
+    -- Центрируем круг FOV
     FOVCircle.Visible = Settings.ShowFOV
     FOVCircle.Radius = Settings.AimRadius
     FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
     FOVCircle.Color = Color3.new(1,1,1)
+    FOVCircle.Thickness = 1
     
     if AimbotToggled then
-        local t = GetClosest()
-        if t then
-            local p = Camera:WorldToViewportPoint(t.Position)
-            mousemoverel((p.X - Camera.ViewportSize.X/2) * Settings.Sensitivity, (p.Y - Camera.ViewportSize.Y/2) * Settings.Sensitivity)
+        local target = GetClosest()
+        if target then
+            local pos = Camera:WorldToViewportPoint(target.Position)
+            mousemoverel((pos.X - Camera.ViewportSize.X/2) * Settings.Sensitivity, (pos.Y - Camera.ViewportSize.Y/2) * Settings.Sensitivity)
         end
     end
 end)
 
-for _, p in pairs(Players:GetPlayers()) do if p ~= LocalPlayer and p.Character then ApplyChams(p.Character) end end
-Players.PlayerAdded:Connect(function(p) p.CharacterAdded:Connect(ApplyChams) end)
+for _, p in pairs(Players:GetPlayers()) do if p ~= LocalPlayer and p.Character then ApplyESP(p.Character) end end
+Players.PlayerAdded:Connect(function(p) p.CharacterAdded:Connect(ApplyESP) end)
 
 ShowLogin()
