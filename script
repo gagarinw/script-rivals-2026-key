@@ -1,36 +1,66 @@
--- [[ ILLIA SYSTEM V3 - FINAL FIX ]] --
-local API_URL = "https://script.google.com/macros/s/AKfycbywLlQYH4OIiGA0KYaIdqbYBYiOJ99bUmutzF_sSmcE3I5XIqoc3SVXcArKvejctI60wg/exec"
+-- [[ ILLIA SYSTEM V3 - INTEGRATED WITH TABLE ]] --
+
+local API_URL = "ТВОЯ_ССЫЛКА_ИЗ_APPS_SCRIPT"
 local HttpService = game:GetService("HttpService")
 
 local canSave = (isfile and readfile and writefile and delfile)
 local KEY_FILE = "illia_v3_key.txt"
+local SETTINGS_FILE = "illia_v3_settings.json"
+
+local Settings = {
+    AimbotEnabled = true,
+    ESP_Enabled = true,
+    ESP_Rainbow = false, 
+    ESP_Hue = 0.6,       
+    ShowFOV = false,     
+    AimRadius = 150,     
+    Sensitivity = 0.25, 
+    MenuKey = Enum.KeyCode.Insert,
+    AimKey = Enum.KeyCode.E -- Клавиша захвата
+}
 
 local IsAdmin = false 
 local ExpiryTimestamp = 0 
-local AimbotActive = false
+local AimbotActive = false 
+local Players = game:GetService("Players")
+local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local HWID = game:GetService("RbxAnalyticsService"):GetClientId()
 
--- ПРОВЕРКА КЛЮЧА
+local Colors = {
+    MainBlue = Color3.fromRGB(0, 120, 255),
+    AdminGold = Color3.fromRGB(255, 200, 0),
+    BG = Color3.fromRGB(15, 15, 15),
+    White = Color3.fromRGB(255, 255, 255),
+    LogoutRed = Color3.fromRGB(200, 50, 50)
+}
+
+-- [[ ЛОГИКА ПРОВЕРКИ ]] --
 local function VerifyKey(key)
-    local ok, res = pcall(function() 
+    local success, result = pcall(function() 
         return game:HttpGet(API_URL .. "?check=" .. key .. "&hwid=" .. HWID) 
     end)
-    
-    if ok then
-        if res == "admin" then
+
+    if success then
+        if result == "admin" then
             IsAdmin = true
-            ExpiryTimestamp = 0 -- Для админа обнуляем, чтобы не было таймера
+            ExpiryTimestamp = 0
             if canSave then writefile(KEY_FILE, key) end
             return "ok"
-        elseif res:find("valid|") then
-            local data = string.split(res, "|")
-            ExpiryTimestamp = tonumber(data[2])
+        elseif result:find("valid") then
+            -- Читаем формат "valid|1713460000000" из таблицы
+            local parts = string.split(result, "|")
+            ExpiryTimestamp = tonumber(parts[2]) or 0
             IsAdmin = false
             if canSave then writefile(KEY_FILE, key) end
             return "ok"
-        elseif res == "expired" then return "Ключ истек!"
-        elseif res == "wrong_hwid" then return "Чужой ПК!"
+        elseif result == "expired" then
+            return "Время ключа вышло!"
+        elseif result == "wrong_hwid" then
+            return "Ключ привязан к другому ПК!"
         end
     end
     return "Неверный ключ!"
@@ -38,8 +68,9 @@ end
 
 local function GetTimeLeft()
     if IsAdmin then return "БЕССРОЧНО" end
-    if ExpiryTimestamp == 0 then return "00ч 00м 00с" end
+    if ExpiryTimestamp == 0 then return "Загрузка..." end
     
+    -- Конвертируем миллисекунды JS в секунды Lua
     local left = math.floor(ExpiryTimestamp / 1000) - os.time()
     if left <= 0 then return "ИСТЕК" end
     
@@ -49,66 +80,89 @@ local function GetTimeLeft()
     return string.format("%02dч %02dм %02dс", h, m, s)
 end
 
--- ИНТЕРФЕЙС
-local ActiveMenu, ShowLogin
+-- [[ ИНТЕРФЕЙС ]] --
+local ActiveMenu, AimStatusLabel, ShowLogin
 
 function BuildMenu()
-    local Gui = Instance.new("ScreenGui", CoreGui)
-    local Main = Instance.new("Frame", Gui)
-    Main.Size = UDim2.new(0, 260, 0, 300)
-    Main.Position = UDim2.new(0.5, -130, 0.5, -150)
-    Main.BackgroundColor3 = Color3.fromRGB(15,15,15)
-    
+    local Gui = Instance.new("ScreenGui", CoreGui); Gui.Name = "IlliaV3_Menu"
+    local Main = Instance.new("ScrollingFrame", Gui)
+    Main.Size = UDim2.new(0, 280, 0, 400); Main.Position = UDim2.new(0.5, -140, 0.5, -200)
+    Main.BackgroundColor3 = Colors.BG; Main.AutomaticCanvasSize = Enum.AutomaticSize.Y
+    Main.ScrollBarThickness = 2
+    Instance.new("UICorner", Main)
+
+    local List = Instance.new("UIListLayout", Main); List.Padding = UDim.new(0, 10); List.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
     local Title = Instance.new("TextLabel", Main)
-    Title.Size = UDim2.new(1, 0, 0, 40)
-    Title.Text = IsAdmin and "👑 ILLIA ADMIN" or "👤 ILLIA USER"
-    Title.BackgroundColor3 = IsAdmin and Color3.fromRGB(255,200,0) or Color3.fromRGB(0,120,255)
-    
+    Title.Size = UDim2.new(1, 0, 0, 45); Title.Text = IsAdmin and "👑 ADMIN" or "👤 USER"
+    Title.TextColor3 = IsAdmin and Color3.new(0,0,0) or Colors.White
+    Title.BackgroundColor3 = IsAdmin and Colors.AdminGold or Colors.MainBlue
+    Title.Font = Enum.Font.GothamBold; Instance.new("UICorner", Title)
+
     local TimerLabel = Instance.new("TextLabel", Main)
-    TimerLabel.Size = UDim2.new(1, 0, 0, 40)
-    TimerLabel.Position = UDim2.new(0, 0, 0.2, 0)
-    TimerLabel.BackgroundTransparency = 1
-    TimerLabel.TextColor3 = Color3.new(1,1,1)
+    TimerLabel.Size = UDim2.new(0.9, 0, 0, 30); TimerLabel.BackgroundTransparency = 1; TimerLabel.TextColor3 = Colors.White
+    TimerLabel.Font = Enum.Font.Gotham; TimerLabel.TextSize = 14
+
+    AimStatusLabel = Instance.new("TextLabel", Main)
+    AimStatusLabel.Size = UDim2.new(0.9,0,0,30); AimStatusLabel.BackgroundTransparency = 1
+    AimStatusLabel.TextSize = 14; AimStatusLabel.Font = Enum.Font.GothamBold
+    AimStatusLabel.Text = "ЗАХВАТ ["..Settings.AimKey.Name.."]: ВЫКЛ"
+    AimStatusLabel.TextColor3 = Color3.new(1,0,0)
+
+    local Logout = Instance.new("TextButton", Main)
+    Logout.Size = UDim2.new(0.9, 0, 0, 35); Logout.BackgroundColor3 = Colors.LogoutRed
+    Logout.Text = "ВЫЙТИ (LOGOUT)"; Logout.TextColor3 = Colors.White
+    Logout.Font = Enum.Font.GothamBold; Instance.new("UICorner", Logout)
     
-    -- Обновление таймера
+    Logout.MouseButton1Click:Connect(function() 
+        if canSave then pcall(function() delfile(KEY_FILE) end) end
+        Gui:Destroy(); ShowLogin() 
+    end)
+
+    -- Поток обновления таймера и статуса
     task.spawn(function()
         while Gui.Parent do
-            TimerLabel.Text = "Осталось: " .. GetTimeLeft()
+            TimerLabel.Text = "До конца: " .. GetTimeLeft()
+            -- Если время вышло, кикаем в меню логина
             if not IsAdmin and ExpiryTimestamp ~= 0 and (math.floor(ExpiryTimestamp / 1000) - os.time()) <= 0 then
                 Gui:Destroy(); ShowLogin(); break
             end
             task.wait(1)
         end
     end)
-    
     return Gui
 end
 
 ShowLogin = function()
-    local Auth = Instance.new("ScreenGui", CoreGui)
-    local Box = Instance.new("Frame", Auth)
-    Box.Size = UDim2.new(0, 300, 0, 200)
-    Box.Position = UDim2.new(0.5, -150, 0.5, -100)
-    Box.BackgroundColor3 = Color3.fromRGB(20,20,20)
+    if CoreGui:FindFirstChild("IlliaLogin") then CoreGui.IlliaLogin:Destroy() end
+    local Auth = Instance.new("ScreenGui", CoreGui); Auth.Name = "IlliaLogin"
+    local Box = Instance.new("Frame", Auth); Box.Size = UDim2.new(0, 300, 0, 250); Box.Position = UDim2.new(0.5,-150,0.5,-125); Box.BackgroundColor3 = Colors.BG; Instance.new("UICorner", Box)
+    local Inp = Instance.new("TextBox", Box); Inp.Size = UDim2.new(0.8, 0, 0, 40); Inp.Position = UDim2.new(0.1, 0, 0.2, 0); Inp.PlaceholderText = "Введите ключ..."; Inp.BackgroundColor3 = Color3.fromRGB(30,30,30); Inp.TextColor3 = Colors.White; Instance.new("UICorner", Inp)
+    local Status = Instance.new("TextLabel", Box); Status.Size = UDim2.new(1,0,0,20); Status.Position = UDim2.new(0,0,0.4,0); Status.Text = ""; Status.TextColor3 = Colors.White; Status.BackgroundTransparency = 1
+    local Go = Instance.new("TextButton", Box); Go.Size = UDim2.new(0.8,0,0,40); Go.Position = UDim2.new(0.1,0,0.6,0); Go.BackgroundColor3 = Colors.MainBlue; Go.Text = "ВОЙТИ"; Go.TextColor3 = Colors.White; Instance.new("UICorner", Go)
     
-    local Inp = Instance.new("TextBox", Box)
-    Inp.Size = UDim2.new(0.8, 0, 0, 40)
-    Inp.Position = UDim2.new(0.1, 0, 0.3, 0)
-    Inp.PlaceholderText = "Ключ..."
-    
-    local Go = Instance.new("TextButton", Box)
-    Go.Size = UDim2.new(0.8, 0, 0, 40)
-    Go.Position = UDim2.new(0.1, 0, 0.6, 0)
-    Go.Text = "ВОЙТИ"
     Go.MouseButton1Click:Connect(function()
-        local res = VerifyKey(Inp.Text)
-        if res == "ok" then Auth:Destroy(); ActiveMenu = BuildMenu() end
+        Status.Text = "Проверка..."; local r = VerifyKey(Inp.Text)
+        if r == "ok" then Auth:Destroy(); ActiveMenu = BuildMenu() else Status.Text = r; Status.TextColor3 = Color3.new(1,0,0) end
     end)
 end
 
--- Авто-вход
+-- Вход при запуске
 if canSave and isfile(KEY_FILE) then
-    if VerifyKey(readfile(KEY_FILE)) == "ok" then ActiveMenu = BuildMenu() else ShowLogin() end
+    local savedKey = readfile(KEY_FILE)
+    if VerifyKey(savedKey) == "ok" then ActiveMenu = BuildMenu() else ShowLogin() end
 else
     ShowLogin()
 end
+
+-- Управление клавишами
+UserInputService.InputBegan:Connect(function(input, g)
+    if g then return end
+    if input.KeyCode == Settings.AimKey then
+        AimbotActive = not AimbotActive
+        if AimStatusLabel then
+            AimStatusLabel.Text = "ЗАХВАТ ["..Settings.AimKey.Name.."]: "..(AimbotActive and "ВКЛ" or "ВЫКЛ")
+            AimStatusLabel.TextColor3 = AimbotActive and Color3.new(0,1,0) or Color3.new(1,0,0)
+        end
+    end
+end)
