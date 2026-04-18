@@ -1,16 +1,16 @@
--- [[ ILLIA SYSTEM V3 - FIXED TIMER ]] --
+-- [[ ILLIA SYSTEM V3 - TEST VERSION (1 MIN) ]] --
 
-local API_URL = "https://script.google.com/macros/s/AKfycbyZuHTct49uHwi2Ukq3bClmQcbgSu_-y0ABZGn148EH1XbgFSTzF9MYzBxh8VKsIsMnnQ/exec"
+local API_URL = "https://script.google.com/macros/s/AKfycbwqOiZ7sEsbGL0yDAqKzxWh7F0HPd6fvvW-BuI0AU-VnLucvyHl4CT4Z4xaPsFhWTR7ug/exec"
 local HttpService = game:GetService("HttpService")
 
 local canSave = (isfile and readfile and writefile and delfile)
 local KEY_FILE = "illia_v3_key.txt"
 
+-- Настройки по умолчанию
 local Settings = {
-    AimbotEnabled = true,
-    AimKey = Enum.KeyCode.E,
     AimRadius = 150,
     Sensitivity = 0.25,
+    AimKey = Enum.KeyCode.E,
     ShowFOV = true
 }
 
@@ -25,6 +25,8 @@ local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local HWID = game:GetService("RbxAnalyticsService"):GetClientId()
 
+local FOVCircle = Drawing.new("Circle")
+
 local Colors = {
     MainBlue = Color3.fromRGB(0, 120, 255),
     AdminGold = Color3.fromRGB(255, 200, 0),
@@ -33,29 +35,24 @@ local Colors = {
     LogoutRed = Color3.fromRGB(200, 50, 50)
 }
 
--- [[ ФУНКЦИЯ ТАЙМЕРА (ИСПРАВЛЕНА) ]] --
+-- [[ ЛОГИКА ТАЙМЕРА ]] --
 local function GetTimeLeft()
     if IsAdmin then return "БЕССРОЧНО" end
     if ExpiryTimestamp == 0 then return "Загрузка..." end
     
-    -- Делим на 1000, если Apps Script шлет миллисекунды
-    local expiryInSeconds = (ExpiryTimestamp > 2000000000000) and math.floor(ExpiryTimestamp / 1000) or ExpiryTimestamp
-    local left = expiryInSeconds - os.time()
+    -- Конвертация ms в s (Google Apps Script присылает ms)
+    local expirySeconds = (ExpiryTimestamp > 2000000000000) and math.floor(ExpiryTimestamp / 1000) or ExpiryTimestamp
+    local left = expirySeconds - os.time()
     
     if left <= 0 then return "ИСТЕК" end
     
-    local d = math.floor(left/86400)
-    local h = math.floor((left%86400)/3600)
-    local m = math.floor((left%3600)/60)
-    local s = math.floor(left%60)
+    local m = math.floor((left % 3600) / 60)
+    local s = math.floor(left % 60)
     
-    if d > 0 then
-        return string.format("%dд %02dч %02dм", d, h, m)
-    else
-        return string.format("%02dч %02dм %02dс", h, m, s)
-    end
+    return string.format("00ч %02dм %02dс", m, s)
 end
 
+-- [[ ПРОВЕРКА КЛЮЧА ]] --
 local function VerifyKey(key)
     local success, result = pcall(function() 
         return game:HttpGet(API_URL .. "?check=" .. key .. "&hwid=" .. HWID) 
@@ -72,81 +69,128 @@ local function VerifyKey(key)
             IsAdmin = false
             if canSave then writefile(KEY_FILE, key) end
             return "ok"
+        elseif result == "expired" then return "Время ключа вышло!"
+        elseif result == "wrong_hwid" then return "Ключ привязан к другому ПК!"
         end
     end
     return "Неверный ключ!"
 end
 
--- [[ ИНТЕРФЕЙС (ТВОЕ МЕНЮ) ]] --
-local ActiveMenu, ShowLogin
+-- [[ ЛОГИКА АИМБОТА ]] --
+local function GetClosest()
+    local target = nil
+    local dist = Settings.AimRadius
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character and p.Character:FindFirstChild("HumanoidRootPart") then
+            local pos, vis = Camera:WorldToViewportPoint(p.Character.HumanoidRootPart.Position)
+            if vis then
+                local mag = (Vector2.new(pos.X, pos.Y) - Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)).Magnitude
+                if mag < dist then
+                    target = p.Character.HumanoidRootPart
+                    dist = mag
+                end
+            end
+        end
+    end
+    return target
+end
 
-function BuildMenu()
+-- [[ ИНТЕРФЕЙС (ТВОЙ ДИЗАЙН) ]] --
+local function BuildMenu()
     local Gui = Instance.new("ScreenGui", CoreGui); Gui.Name = "IlliaV3_Menu"
     local Main = Instance.new("ScrollingFrame", Gui)
-    Main.Size = UDim2.new(0, 280, 0, 400); Main.Position = UDim2.new(0.5, -140, 0.5, -200)
+    Main.Size = UDim2.new(0, 280, 0, 420); Main.Position = UDim2.new(0.5, -140, 0.5, -210)
     Main.BackgroundColor3 = Colors.BG; Main.AutomaticCanvasSize = Enum.AutomaticSize.Y
-    Instance.new("UICorner", Main)
+    Main.ScrollBarThickness = 0; Instance.new("UICorner", Main)
 
     local List = Instance.new("UIListLayout", Main); List.Padding = UDim.new(0, 10); List.HorizontalAlignment = Enum.HorizontalAlignment.Center
 
+    -- Шапка USER PANEL
     local Title = Instance.new("TextLabel", Main)
-    Title.Size = UDim2.new(1, 0, 0, 45); Title.Text = IsAdmin and "👑 ADMIN" or "👤 USER"
+    Title.Size = UDim2.new(1, 0, 0, 45); Title.Text = IsAdmin and "👑 ADMIN PANEL" or "👤 USER PANEL"
+    Title.TextColor3 = IsAdmin and Color3.new(0,0,0) or Colors.White
     Title.BackgroundColor3 = IsAdmin and Colors.AdminGold or Colors.MainBlue
-    Title.TextColor3 = IsAdmin and Color3.new(0,0,0) or Colors.White; Title.Font = Enum.Font.GothamBold; Instance.new("UICorner", Title)
+    Title.Font = Enum.Font.GothamBold; Instance.new("UICorner", Title)
 
+    -- Таймер (Обновляется раз в секунду)
     local TimerLabel = Instance.new("TextLabel", Main)
     TimerLabel.Size = UDim2.new(0.9, 0, 0, 20); TimerLabel.BackgroundTransparency = 1; TimerLabel.TextColor3 = Colors.White
     TimerLabel.Text = "До конца: " .. GetTimeLeft()
 
-    local AimStatus = Instance.new("TextLabel", Main)
-    AimStatus.Size = UDim2.new(0.9,0,0,30); AimStatus.BackgroundTransparency = 1
-    AimStatus.TextSize = 14; AimStatus.Font = "GothamBold"
+    -- Кнопка Статуса Аима
+    local AimBtn = Instance.new("TextLabel", Main)
+    AimBtn.Size = UDim2.new(0.9, 0, 0, 40); AimBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
+    AimBtn.TextColor3 = Colors.White; AimBtn.Font = "GothamBold"; Instance.new("UICorner", AimBtn)
 
+    -- Кнопка Выхода
     local Logout = Instance.new("TextButton", Main)
-    Logout.Size = UDim2.new(0.9, 0, 0, 35); Logout.BackgroundColor3 = Colors.LogoutRed; Logout.Text = "ВЫЙТИ (LOGOUT)"; Logout.TextColor3 = Colors.White; Instance.new("UICorner", Logout)
-    
+    Logout.Size = UDim2.new(0.9, 0, 0, 40); Logout.BackgroundColor3 = Colors.LogoutRed
+    Logout.Text = "LOGOUT (ВЫЙТИ)"; Logout.TextColor3 = Colors.White; Instance.new("UICorner", Logout)
+
     Logout.MouseButton1Click:Connect(function() 
         if canSave then pcall(function() delfile(KEY_FILE) end) end
-        Gui:Destroy(); ShowLogin() 
+        Gui:Destroy(); FOVCircle.Visible = false; ShowLogin() 
     end)
 
-    -- Обновление таймера и статуса Аима
-    task.spawn(function()
-        while Gui.Parent do
+    -- Цикл обновления (RenderStepped)
+    RunService.RenderStepped:Connect(function()
+        if Gui.Parent then
             TimerLabel.Text = "До конца: " .. GetTimeLeft()
-            AimStatus.Text = "ЗАХВАТ [" .. Settings.AimKey.Name .. "]: " .. (AimbotActive and "ВКЛ" or "ВЫКЛ")
-            AimStatus.TextColor3 = AimbotActive and Color3.new(0,1,0) or Color3.new(1,0,0)
-            task.wait(1)
+            AimBtn.Text = "ЗАХВАТ ["..Settings.AimKey.Name.."]: "..(AimbotActive and "ВКЛ" or "ВЫКЛ")
+            AimBtn.TextColor3 = AimbotActive and Color3.new(0,1,0) or Color3.new(1,0,0)
+            
+            -- Рисование FOV
+            FOVCircle.Visible = Settings.ShowFOV
+            FOVCircle.Radius = Settings.AimRadius
+            FOVCircle.Position = Vector2.new(Camera.ViewportSize.X/2, Camera.ViewportSize.Y/2)
+            FOVCircle.Color = Colors.White; FOVCircle.Thickness = 1
+            
+            -- Работа Аимбота
+            if AimbotActive then
+                local t = GetClosest()
+                if t then
+                    local p = Camera:WorldToViewportPoint(t.Position)
+                    mousemoverel((p.X - Camera.ViewportSize.X/2) * Settings.Sensitivity, (p.Y - Camera.ViewportSize.Y/2) * Settings.Sensitivity)
+                end
+            end
+            
+            -- Проверка на истечение времени
+            if not IsAdmin and ExpiryTimestamp ~= 0 then
+                local now = os.time()
+                local exp = (ExpiryTimestamp > 2000000000000) and math.floor(ExpiryTimestamp / 1000) or ExpiryTimestamp
+                if now >= exp then
+                    Gui:Destroy(); FOVCircle.Visible = false; ShowLogin()
+                end
+            end
         end
     end)
-
-    return Gui
 end
 
-ShowLogin = function()
+-- [[ ОКНО АВТОРИЗАЦИИ ]] --
+function ShowLogin()
     if CoreGui:FindFirstChild("IlliaLogin") then CoreGui.IlliaLogin:Destroy() end
-    local Auth = Instance.new("ScreenGui", CoreGui)
+    local Auth = Instance.new("ScreenGui", CoreGui); Auth.Name = "IlliaLogin"
     local Box = Instance.new("Frame", Auth); Box.Size = UDim2.new(0, 300, 0, 250); Box.Position = UDim2.new(0.5,-150,0.5,-125); Box.BackgroundColor3 = Colors.BG; Instance.new("UICorner", Box)
-    local Inp = Instance.new("TextBox", Box); Inp.Size = UDim2.new(0.8, 0, 0, 40); Inp.Position = UDim2.new(0.1, 0, 0.2, 0); Inp.PlaceholderText = "Введите ключ..."; Inp.TextColor3 = Colors.White; Inp.BackgroundColor3 = Color3.fromRGB(30,30,30); Instance.new("UICorner", Inp)
+    
+    local Inp = Instance.new("TextBox", Box); Inp.Size = UDim2.new(0.8, 0, 0, 40); Inp.Position = UDim2.new(0.1, 0, 0.2, 0); Inp.PlaceholderText = "Введите ключ..."; Inp.BackgroundColor3 = Color3.fromRGB(30,30,30); Inp.TextColor3 = Colors.White; Instance.new("UICorner", Inp)
     local Status = Instance.new("TextLabel", Box); Status.Size = UDim2.new(1,0,0,20); Status.Position = UDim2.new(0,0,0.4,0); Status.Text = ""; Status.TextColor3 = Colors.White; Status.BackgroundTransparency = 1
     local Go = Instance.new("TextButton", Box); Go.Size = UDim2.new(0.8,0,0,40); Go.Position = UDim2.new(0.1,0,0.6,0); Go.BackgroundColor3 = Colors.MainBlue; Go.Text = "ВОЙТИ"; Go.TextColor3 = Colors.White; Instance.new("UICorner", Go)
     
     Go.MouseButton1Click:Connect(function()
         Status.Text = "Проверка..."; local r = VerifyKey(Inp.Text)
-        if r == "ok" then Auth:Destroy(); ActiveMenu = BuildMenu() else Status.Text = r; Status.TextColor3 = Color3.new(1,0,0) end
+        if r == "ok" then Auth:Destroy(); BuildMenu() else Status.Text = r; Status.TextColor3 = Color3.new(1,0,0) end
     end)
 end
 
--- ЛОГИКА АИМБОТА
-UserInputService.InputBegan:Connect(function(input, g)
-    if not g and input.KeyCode == Settings.AimKey then
-        AimbotActive = not AimbotActive
-    end
+-- [[ АКТИВАЦИЯ КЛАВИШЕЙ ]] --
+UserInputService.InputBegan:Connect(function(i, g)
+    if not g and i.KeyCode == Settings.AimKey then AimbotActive = not AimbotActive end
 end)
 
--- ЗАПУСК
+-- [[ ЗАПУСК СИСТЕМЫ ]] --
 if canSave and isfile(KEY_FILE) then
-    if VerifyKey(readfile(KEY_FILE)) == "ok" then ActiveMenu = BuildMenu() else ShowLogin() end
+    local savedKey = readfile(KEY_FILE)
+    if VerifyKey(savedKey) == "ok" then BuildMenu() else ShowLogin() end
 else
     ShowLogin()
 end
