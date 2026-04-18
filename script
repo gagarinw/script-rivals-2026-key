@@ -11,7 +11,8 @@ local Settings = {
     AimRadius = 140,     
     Sensitivity = 0.4,   
     AimPart = "Head",
-    MenuKey = Enum.KeyCode.Insert
+    MenuKey = Enum.KeyCode.Insert, -- Клавиша меню
+    AimKey = Enum.KeyCode.E        -- Клавиша Аима
 }
 
 local IsAdmin = false 
@@ -42,53 +43,68 @@ local function VerifyKeyRemote(input)
     return "fail"
 end
 
--- [[ ИНТЕРФЕЙС ВХОДА ]] --
-if CoreGui:FindFirstChild("IlliaSystemV3") then CoreGui.IlliaSystemV3:Destroy() end
-local MainSystemGui = Instance.new("ScreenGui", CoreGui)
+-- [[ ФУНКЦИЯ СОЗДАНИЯ ПОЛЗУНКА ]] --
+local function CreateSlider(parent, text, prop, min, max, adminOnly)
+    local SliderBG = Instance.new("Frame", parent)
+    SliderBG.Size = UDim2.new(0.9, 0, 0, 45)
+    SliderBG.BackgroundTransparency = 1
 
-local Center = Instance.new("Frame", MainSystemGui)
-Center.Size = UDim2.new(0, 350, 0, 350)
-Center.Position = UDim2.new(0.5, -175, 0.5, -175)
-Center.BackgroundColor3 = Colors.Background
-Instance.new("UICorner", Center)
+    local Label = Instance.new("TextLabel", SliderBG)
+    Label.Size = UDim2.new(1, 0, 0, 20)
+    Label.BackgroundTransparency = 1
+    Label.TextColor3 = Color3.new(1,1,1)
+    Label.TextSize = 12
+    Label.Font = Enum.Font.GothamBold
+    Label.TextXAlignment = Enum.TextXAlignment.Left
 
-local KeyInput = Instance.new("TextBox", Center)
-KeyInput.Size = UDim2.new(0.85, 0, 0, 45)
-KeyInput.Position = UDim2.new(0.075, 0, 0.25, 0)
-KeyInput.PlaceholderText = "Введите ключ..."
-KeyInput.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
-KeyInput.TextColor3 = Color3.new(1, 1, 1)
-Instance.new("UICorner", KeyInput)
+    local Tray = Instance.new("Frame", SliderBG)
+    Tray.Size = UDim2.new(1, 0, 0, 6)
+    Tray.Position = UDim2.new(0, 0, 0.7, 0)
+    Tray.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    Instance.new("UICorner", Tray)
 
-local CheckBtn = Instance.new("TextButton", Center)
-CheckBtn.Size = UDim2.new(0.85, 0, 0, 50)
-CheckBtn.Position = UDim2.new(0.075, 0, 0.45, 0)
-CheckBtn.BackgroundColor3 = Colors.MainBlue
-CheckBtn.Text = "ПРОВЕРИТЬ КЛЮЧ"
-CheckBtn.TextColor3 = Color3.new(1, 1, 1)
-Instance.new("UICorner", CheckBtn)
+    local Fill = Instance.new("Frame", Tray)
+    Fill.Size = UDim2.new((Settings[prop] - min) / (max - min), 0, 1, 0)
+    Fill.BackgroundColor3 = adminOnly and Colors.AdminGold or Colors.MainBlue
+    Instance.new("UICorner", Fill)
 
-local GetKeyBtn = Instance.new("TextButton", Center)
-GetKeyBtn.Size = UDim2.new(0.85, 0, 0, 50)
-GetKeyBtn.Position = UDim2.new(0.075, 0, 0.65, 0)
-GetKeyBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-GetKeyBtn.Text = "ПОЛУЧИТЬ КЛЮЧ (COPY)"
-GetKeyBtn.TextColor3 = Color3.new(0.8, 0.8, 0.8)
-Instance.new("UICorner", GetKeyBtn)
+    local function update(input)
+        if adminOnly and not IsAdmin then return end
+        local pos = math.clamp((input.Position.X - Tray.AbsolutePosition.X) / Tray.AbsoluteSize.X, 0, 1)
+        Fill.Size = UDim2.new(pos, 0, 1, 0)
+        local val = math.round((min + (max - min) * pos) * 100) / 100
+        Settings[prop] = val
+        Label.Text = text .. ": " .. tostring(val)
+    end
 
-GetKeyBtn.MouseButton1Click:Connect(function()
-    setclipboard(GEN_LINK)
-    GetKeyBtn.Text = "СКОПИРОВАНО!"
-    task.wait(2)
-    GetKeyBtn.Text = "ПОЛУЧИТЬ КЛЮЧ (COPY)"
-end)
+    local dragging = false
+    Tray.InputBegan:Connect(function(input)
+        if (input.UserInputType == Enum.UserInputType.MouseButton1) and not (adminOnly and not IsAdmin) then
+            dragging = true
+            update(input)
+        end
+    end)
+    UserInputService.InputEnded:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then update(input) end
+    end)
 
--- [[ МЕНЮ ]] --
+    if adminOnly and not IsAdmin then
+        Label.Text = text .. " [🔒 ADMIN]"
+        Fill.BackgroundColor3 = Colors.LockedGrey
+    else
+        Label.Text = text .. ": " .. tostring(Settings[prop])
+    end
+end
+
+-- [[ МЕНЮ ЧИТА ]] --
 function BuildMenu()
     local MainGui = Instance.new("ScreenGui", CoreGui)
     local MainFrame = Instance.new("Frame", MainGui)
-    MainFrame.Size = UDim2.new(0, 280, 0, 480)
-    MainFrame.Position = UDim2.new(0.5, -140, 0.5, -240)
+    MainFrame.Size = UDim2.new(0, 280, 0, 580) -- Увеличил высоту для инструкций
+    MainFrame.Position = UDim2.new(0.5, -140, 0.5, -290)
     MainFrame.BackgroundColor3 = Colors.Background
     MainFrame.Active = true
     MainFrame.Draggable = true
@@ -99,15 +115,32 @@ function BuildMenu()
     Title.BackgroundColor3 = IsAdmin and Colors.AdminGold or Colors.TitleBar
     Title.Text = IsAdmin and "ILLIA V3 [ADMIN]" or "ILLIA V3"
     Title.TextColor3 = IsAdmin and Color3.new(0,0,0) or Color3.new(1,1,1)
+    Title.Font = Enum.Font.GothamBold
     Instance.new("UICorner", Title)
 
     local UIList = Instance.new("UIListLayout", MainFrame)
-    UIList.Padding = UDim.new(0, 5)
+    UIList.Padding = UDim.new(0, 8)
     UIList.HorizontalAlignment = Enum.HorizontalAlignment.Center
+
+    -- БЛОК ИНСТРУКЦИЙ
+    local InfoFrame = Instance.new("Frame", MainFrame)
+    InfoFrame.Size = UDim2.new(0.9, 0, 0, 60)
+    InfoFrame.BackgroundTransparency = 1
+    
+    local InfoText = Instance.new("TextLabel", InfoFrame)
+    InfoText.Size = UDim2.new(1, 0, 1, 0)
+    InfoText.BackgroundTransparency = 1
+    InfoText.TextColor3 = Color3.fromRGB(200, 200, 200)
+    InfoText.TextSize = 12
+    InfoText.Font = Enum.Font.GothamMedium
+    InfoText.Text = "⌨️ Меню: [INSERT]\n🎯 Аимбот: Зажать [E]\n🚀 Разработчик: ILLIA"
+    
+    Instance.new("Frame", MainFrame).Size = UDim2.new(1,0,0,10) -- Разделитель
 
     local function AddToggle(text, prop, adminOnly)
         local btn = Instance.new("TextButton", MainFrame)
         btn.Size = UDim2.new(0.9, 0, 0, 35)
+        btn.Font = Enum.Font.GothamBold
         local function up()
             if adminOnly and not IsAdmin then
                 btn.Text = text .. " [🔒 ADMIN]"
@@ -124,43 +157,19 @@ function BuildMenu()
         Instance.new("UICorner", btn)
     end
 
-    local function AddSlider(text, prop, min, max, adminOnly)
-        local btn = Instance.new("TextButton", MainFrame)
-        btn.Size = UDim2.new(0.9, 0, 0, 35)
-        local function up()
-            if adminOnly and not IsAdmin then
-                btn.Text = text .. " [🔒 ADMIN]"
-                btn.BackgroundColor3 = Colors.LockedGrey
-            else
-                btn.Text = text .. ": " .. tostring(Settings[prop])
-                btn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
-            end
-        end
-        btn.MouseButton1Click:Connect(function()
-            if not (adminOnly and not IsAdmin) then
-                if Settings[prop] >= max then Settings[prop] = min else Settings[prop] = math.round((Settings[prop] + (max-min)/10)*100)/100 end
-                up()
-            end
-        end)
-        up()
-        Instance.new("UICorner", btn)
-    end
-
-    Instance.new("Frame", MainFrame).Size = UDim2.new(1,0,0,45)
-    
-    -- ПУБЛИЧНЫЕ НАСТРОЙКИ (ВСЕМ)
     AddToggle("Аимбот", "AimbotEnabled", false)
-    AddSlider("Радиус Аима", "AimRadius", 50, 500, false)
-    AddSlider("Скорость Аима", "Sensitivity", 0.05, 1, false) -- ТЕПЕРЬ ДЛЯ ВСЕХ
-    AddToggle("ESP Игроки", "ESP_Enabled", false)
+    CreateSlider(MainFrame, "Радиус Аима", "AimRadius", 50, 600, false)
+    CreateSlider(MainFrame, "Скорость Аима", "Sensitivity", 0.05, 1, false)
     
-    -- АДМИН НАСТРОЙКИ
+    AddToggle("ESP Игроки", "ESP_Enabled", false)
     AddToggle("Радужный ESP", "ESP_Rainbow", true)
-    AddSlider("Цвет ESP (Hue)", "ESP_Hue", 0, 1, true)
+    CreateSlider(MainFrame, "Цвет ESP (Hue)", "ESP_Hue", 0, 1, true)
     AddToggle("Показать Круг FOV", "ShowFOV", true)
+    
+    MainGui.Enabled = true
 end
 
--- [[ ЛОГИКА ]] --
+-- [[ ГЛАВНЫЙ ЦИКЛ ]] --
 local FOVCircle = Drawing.new("Circle")
 FOVCircle.Thickness = 1
 FOVCircle.Color = Color3.new(1, 1, 1)
@@ -195,7 +204,8 @@ RunService.RenderStepped:Connect(function()
         end
     end
 
-    if Settings.AimbotEnabled and UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton2) then
+    -- РАБОТА АИМБОТА НА КЛАВИШУ E
+    if Settings.AimbotEnabled and UserInputService:IsKeyDown(Settings.AimKey) then
         local t = GetClosest()
         if t then
             Camera.CFrame = Camera.CFrame:Lerp(CFrame.new(Camera.CFrame.Position, t.Character.Head.Position), Settings.Sensitivity)
@@ -203,7 +213,54 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
+-- [[ ОКНО ВХОДА (ЛОГИКА) ]] --
+if CoreGui:FindFirstChild("IlliaSystemV3") then CoreGui.IlliaSystemV3:Destroy() end
+local MainSystemGui = Instance.new("ScreenGui", CoreGui)
+local Center = Instance.new("Frame", MainSystemGui)
+Center.Size = UDim2.new(0, 350, 0, 350)
+Center.Position = UDim2.new(0.5, -175, 0.5, -175)
+Center.BackgroundColor3 = Colors.Background
+Instance.new("UICorner", Center)
+
+local KeyInput = Instance.new("TextBox", Center)
+KeyInput.Size = UDim2.new(0.85, 0, 0, 45)
+KeyInput.Position = UDim2.new(0.075, 0, 0.25, 0)
+KeyInput.PlaceholderText = "Введите ключ..."
+KeyInput.BackgroundColor3 = Color3.fromRGB(35, 35, 35)
+KeyInput.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", KeyInput)
+
+local CheckBtn = Instance.new("TextButton", Center)
+CheckBtn.Size = UDim2.new(0.85, 0, 0, 50)
+CheckBtn.Position = UDim2.new(0.075, 0, 0.45, 0)
+CheckBtn.BackgroundColor3 = Colors.MainBlue
+CheckBtn.Text = "ПРОВЕРИТЬ КЛЮЧ"
+CheckBtn.TextColor3 = Color3.new(1, 1, 1)
+Instance.new("UICorner", CheckBtn)
+
+local GetKeyBtn = Instance.new("TextButton", Center)
+GetKeyBtn.Size = UDim2.new(0.85, 0, 0, 50)
+GetKeyBtn.Position = UDim2.new(0.075, 0, 0.65, 0)
+GetKeyBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 50)
+GetKeyBtn.Text = "ПОЛУЧИТЬ КЛЮЧ (COPY)"
+Instance.new("UICorner", GetKeyBtn)
+
+GetKeyBtn.MouseButton1Click:Connect(function()
+    setclipboard(GEN_LINK)
+    GetKeyBtn.Text = "СКОПИРОВАНО!"
+    task.wait(2)
+    GetKeyBtn.Text = "ПОЛУЧИТЬ КЛЮЧ (COPY)"
+end)
+
 CheckBtn.MouseButton1Click:Connect(function()
     local res = VerifyKeyRemote(KeyInput.Text)
     if res == "ok" then MainSystemGui:Destroy() BuildMenu() end
+end)
+
+UserInputService.InputBegan:Connect(function(i, g)
+    if g then return end
+    if i.KeyCode == Settings.MenuKey then
+        local gui = CoreGui:FindFirstChild("ScreenGui") -- Находит меню
+        if gui then gui.Enabled = not gui.Enabled end
+    end
 end)
