@@ -1,4 +1,4 @@
--- [[ ILLIA SYSTEM V3 - SERVER SYNC FIXED ]] --
+-- [[ ILLIA SYSTEM V3 - LOGIN STATUS UPDATE ]] --
 
 local API_URL = "https://script.google.com/macros/s/AKfycbyeA-rWBrLS6otVeDtjQvSf3Dfu_0OhX3BHFdq-4M42OYz6aDUy71BO7gARj-fsySztgQ/exec"
 local HttpService = game:GetService("HttpService")
@@ -56,10 +56,10 @@ local Colors = {
     BG = Color3.fromRGB(15, 15, 15),
     White = Color3.fromRGB(255, 255, 255),
     LogoutRed = Color3.fromRGB(200, 50, 50),
+    SuccessGreen = Color3.fromRGB(40, 200, 40),
     Dark = Color3.fromRGB(25, 25, 25)
 }
 
--- [[ ИСПРАВЛЕННЫЙ ФОРМАТ ВРЕМЕНИ ]] --
 local function FormatTime(seconds)
     if seconds <= 0 then return "00:00:00" end
     local h = math.floor(seconds / 3600)
@@ -68,19 +68,18 @@ local function FormatTime(seconds)
     return string.format("%02d:%02d:%02d", h, m, s)
 end
 
--- [[ ПРЯМАЯ СИНХРОНИЗАЦИЯ С ТАБЛИЦЕЙ ]] --
 local function VerifyKey(key)
     local s, r = pcall(function() return game:HttpGet(API_URL .. "?check=" .. key .. "&hwid=" .. HWID) end)
     if s then
         CurrentKey = key
         if r == "admin" then 
             IsAdmin = true 
+            if canSave then writefile(KEY_FILE, key) end
             return "ok"
         elseif r:find("valid") then
-            local data = string.split(r, "|")
-            -- Принудительно конвертируем время из мс в сек и синхронизируем с os.time()
-            ExpiryTimestamp = tonumber(data[2]) / 1000
+            ExpiryTimestamp = tonumber(string.split(r, "|")[2]) / 1000
             IsAdmin = false 
+            if canSave then writefile(KEY_FILE, key) end
             return "ok"
         end
     end
@@ -97,45 +96,9 @@ local function ToggleMenu()
     
     TweenService:Create(MainFrame, tweenInfo, {Size = targetSize, BackgroundTransparency = targetTransparency}):Play()
     for _, item in pairs(MainFrame:GetChildren()) do
-        if item:IsA("GuiObject") then
-            item.Visible = MenuVisible
-        end
+        if item:IsA("GuiObject") then item.Visible = MenuVisible end
     end
     if MenuVisible then MainFrame.Visible = true else task.delay(0.3, function() if not MenuVisible then MainFrame.Visible = false end end) end
-end
-
--- Вспомогательные функции UI (Toggle, Slider)
-local function CreateToggle(parent, name, prop)
-    local B = Instance.new("TextButton", parent)
-    B.Size = UDim2.new(0.9, 0, 0, 45); B.Font = "GothamBold"; B.TextColor3 = Colors.White; B.TextSize = 16
-    B.BackgroundColor3 = Settings[prop] and Colors.MainBlue or Colors.Dark
-    B.Text = name .. ": " .. (Settings[prop] and "ВКЛ" or "ВЫКЛ")
-    Instance.new("UICorner", B).CornerRadius = UDim.new(0, 8)
-    B.MouseButton1Click:Connect(function()
-        Settings[prop] = not Settings[prop]
-        B.Text = name .. ": " .. (Settings[prop] and "ВКЛ" or "ВЫКЛ")
-        B.BackgroundColor3 = Settings[prop] and Colors.MainBlue or Colors.Dark
-        SaveSettings()
-    end)
-end
-
-local function CreateSlider(parent, name, prop, min, max)
-    local F = Instance.new("Frame", parent); F.Size = UDim2.new(0.9, 0, 0, 65); F.BackgroundTransparency = 1
-    local L = Instance.new("TextLabel", F); L.Size = UDim2.new(1, 0, 0, 25); L.Text = name .. ": " .. Settings[prop]; L.TextColor3 = Colors.White; L.Font = "GothamBold"; L.TextSize = 15; L.BackgroundTransparency = 1
-    local B = Instance.new("Frame", F); B.Size = UDim2.new(1, 0, 0, 8); B.Position = UDim2.new(0,0,0.7,0); B.BackgroundColor3 = Colors.Dark; Instance.new("UICorner", B)
-    local Fill = Instance.new("Frame", B); Fill.Size = UDim2.new((Settings[prop]-min)/(max-min), 0, 1, 0); Fill.BackgroundColor3 = Colors.MainBlue; Instance.new("UICorner", Fill)
-    local Btn = Instance.new("TextButton", B); Btn.Size = UDim2.new(1,0,1,0); Btn.BackgroundTransparency = 1; Btn.Text = ""
-    local drag = false
-    Btn.MouseButton1Down:Connect(function() drag = true end)
-    UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false SaveSettings() end end)
-    UserInputService.InputChanged:Connect(function(i)
-        if drag and i.UserInputType == Enum.UserInputType.MouseMovement then
-            local p = math.clamp((i.Position.X - B.AbsolutePosition.X) / B.AbsoluteSize.X, 0, 1)
-            Fill.Size = UDim2.new(p, 0, 1, 0)
-            local v = math.round((min + (max-min)*p)*100)/100
-            Settings[prop] = v; L.Text = name .. ": " .. v
-        end
-    end)
 end
 
 function BuildMenu()
@@ -150,6 +113,40 @@ function BuildMenu()
     
     local L = Instance.new("UIListLayout", MainFrame); L.Padding = UDim.new(0, 12); L.HorizontalAlignment = "Center"
     Instance.new("UIPadding", MainFrame).PaddingTop = UDim.new(0, 15)
+
+    -- Функция создания кнопок (упрощенная для этого блока)
+    local function CreateToggle(parent, name, prop)
+        local B = Instance.new("TextButton", parent)
+        B.Size = UDim2.new(0.9, 0, 0, 45); B.Font = "GothamBold"; B.TextColor3 = Colors.White; B.TextSize = 16
+        B.BackgroundColor3 = Settings[prop] and Colors.MainBlue or Colors.Dark
+        B.Text = name .. ": " .. (Settings[prop] and "ВКЛ" or "ВЫКЛ")
+        Instance.new("UICorner", B).CornerRadius = UDim.new(0, 8)
+        B.MouseButton1Click:Connect(function()
+            Settings[prop] = not Settings[prop]
+            B.Text = name .. ": " .. (Settings[prop] and "ВКЛ" or "ВЫКЛ")
+            B.BackgroundColor3 = Settings[prop] and Colors.MainBlue or Colors.Dark
+            SaveSettings()
+        end)
+    end
+
+    local function CreateSlider(parent, name, prop, min, max)
+        local F = Instance.new("Frame", parent); F.Size = UDim2.new(0.9, 0, 0, 65); F.BackgroundTransparency = 1
+        local L = Instance.new("TextLabel", F); L.Size = UDim2.new(1, 0, 0, 25); L.Text = name .. ": " .. Settings[prop]; L.TextColor3 = Colors.White; L.Font = "GothamBold"; L.TextSize = 15; L.BackgroundTransparency = 1
+        local B = Instance.new("Frame", F); B.Size = UDim2.new(1, 0, 0, 8); B.Position = UDim2.new(0,0,0.7,0); B.BackgroundColor3 = Colors.Dark; Instance.new("UICorner", B)
+        local Fill = Instance.new("Frame", B); Fill.Size = UDim2.new((Settings[prop]-min)/(max-min), 0, 1, 0); Fill.BackgroundColor3 = Colors.MainBlue; Instance.new("UICorner", Fill)
+        local Btn = Instance.new("TextButton", B); Btn.Size = UDim2.new(1,0,1,0); Btn.BackgroundTransparency = 1; Btn.Text = ""
+        local drag = false
+        Btn.MouseButton1Down:Connect(function() drag = true end)
+        UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false SaveSettings() end end)
+        UserInputService.InputChanged:Connect(function(i)
+            if drag and i.UserInputType == Enum.UserInputType.MouseMovement then
+                local p = math.clamp((i.Position.X - B.AbsolutePosition.X) / B.AbsoluteSize.X, 0, 1)
+                Fill.Size = UDim2.new(p, 0, 1, 0)
+                local v = math.round((min + (max-min)*p)*100)/100
+                Settings[prop] = v; L.Text = name .. ": " .. v
+            end
+        end)
+    end
 
     local H = Instance.new("TextLabel", MainFrame); H.Size = UDim2.new(1, 0, 0, 55); H.Font = "GothamBold"; H.TextSize = 20
     H.Text = IsAdmin and "👑 ILLIA V3 ADMIN" or "👤 ILLIA V3 USER"
@@ -173,21 +170,8 @@ function BuildMenu()
     RunService.RenderStepped:Connect(function()
         if G.Parent then
             local MousePos = UserInputService:GetMouseLocation()
-            
-            -- Логика таймера
             local left = IsAdmin and 0 or (ExpiryTimestamp - os.time())
             TimerLabel.Text = IsAdmin and "СТАТУС: БЕССРОЧНО" or "ОСТАЛОСЬ: " .. FormatTime(left)
-
-            -- Принудительная синхронизация каждые 30 сек
-            if not IsAdmin and tick() - LastSync > 30 then
-                LastSync = tick()
-                task.spawn(function()
-                    if VerifyKey(CurrentKey) == "invalid" or (ExpiryTimestamp > 0 and left <= 0) then
-                        G:Destroy(); FOVCircle.Visible = false; ShowLogin()
-                    end
-                end)
-            end
-
             AimStatus.Text = "ЗАХВАТ ["..Settings.AimKey.."]: " .. (AimbotActive and "ВКЛ" or "ВЫКЛ")
             AimStatus.TextColor3 = AimbotActive and Color3.new(0,1,0) or Color3.new(1,0,0)
             FOVCircle.Visible = Settings.ShowFOV; FOVCircle.Radius = Settings.AimRadius; FOVCircle.Position = MousePos 
@@ -212,10 +196,7 @@ function BuildMenu()
                         end
                     end
                 end
-                if target then
-                    local diff = (target - MousePos) * Settings.Sensitivity
-                    mousemoverel(diff.X, diff.Y)
-                end
+                if target then mousemoverel((target - MousePos).X * Settings.Sensitivity, (target - MousePos).Y * Settings.Sensitivity) end
             end
         end
     end)
@@ -227,9 +208,35 @@ function ShowLogin()
     local B = Instance.new("Frame", A); B.Size = UDim2.new(0, 340, 0, 240); B.Position = UDim2.new(0.5,-170,0.5,-120); B.BackgroundColor3 = Colors.BG; Instance.new("UICorner", B)
     local I = Instance.new("TextBox", B); I.Size = UDim2.new(0.8,0,0,50); I.Position = UDim2.new(0.1,0,0.2,0); I.PlaceholderText = "Ключ..."; I.BackgroundColor3 = Colors.Dark; I.TextColor3 = Colors.White; I.TextSize = 18; Instance.new("UICorner", I)
     local S = Instance.new("TextButton", B); S.Size = UDim2.new(0.8,0,0,50); S.Position = UDim2.new(0.1,0,0.6,0); S.BackgroundColor3 = Colors.MainBlue; S.Text = "ВОЙТИ"; S.TextColor3 = Colors.White; S.TextSize = 18; Instance.new("UICorner", S)
+    
+    local busy = false
     S.MouseButton1Click:Connect(function()
-        local res = VerifyKey(I.Text)
-        if res == "ok" then A:Destroy(); BuildMenu() else I.Text = ""; I.PlaceholderText = "НЕВЕРНО" end
+        if busy then return end
+        busy = true
+        
+        -- Статус: ПРОВЕРКА
+        S.Text = "ПРОВЕРКА..."
+        S.BackgroundColor3 = Colors.MainBlue
+        
+        task.spawn(function()
+            local res = VerifyKey(I.Text)
+            task.wait(0.5) -- Небольшая задержка для вида
+            
+            if res == "ok" then
+                S.Text = "УСПЕШНО!"
+                S.BackgroundColor3 = Colors.SuccessGreen
+                task.wait(0.5)
+                A:Destroy()
+                BuildMenu()
+            else
+                S.Text = "НЕВЕРНЫЙ КЛЮЧ"
+                S.BackgroundColor3 = Colors.LogoutRed
+                task.wait(1.5)
+                S.Text = "ВОЙТИ"
+                S.BackgroundColor3 = Colors.MainBlue
+                busy = false
+            end
+        end)
     end)
 end
 
