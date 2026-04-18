@@ -1,8 +1,8 @@
--- [[ ILLIA SYSTEM V3 - ANIMATED UI EDITION ]] --
+-- [[ ILLIA SYSTEM V3 - SERVER SYNC FIXED ]] --
 
 local API_URL = "https://script.google.com/macros/s/AKfycbyeA-rWBrLS6otVeDtjQvSf3Dfu_0OhX3BHFdq-4M42OYz6aDUy71BO7gARj-fsySztgQ/exec"
 local HttpService = game:GetService("HttpService")
-local TweenService = game:GetService("TweenService") -- Сервис для анимаций
+local TweenService = game:GetService("TweenService")
 
 local canSave = (isfile and readfile and writefile and delfile)
 local KEY_FILE = "illia_v3_key.txt"
@@ -35,7 +35,7 @@ LoadSettings()
 local IsAdmin, ExpiryTimestamp, AimbotActive = false, 0, false
 local LastSync = 0
 local CurrentKey = ""
-local MenuVisible = true -- Состояние видимости
+local MenuVisible = true
 
 local Players, LocalPlayer = game:GetService("Players"), game:GetService("Players").LocalPlayer
 local Camera = workspace.CurrentCamera
@@ -59,6 +59,7 @@ local Colors = {
     Dark = Color3.fromRGB(25, 25, 25)
 }
 
+-- [[ ИСПРАВЛЕННЫЙ ФОРМАТ ВРЕМЕНИ ]] --
 local function FormatTime(seconds)
     if seconds <= 0 then return "00:00:00" end
     local h = math.floor(seconds / 3600)
@@ -67,57 +68,43 @@ local function FormatTime(seconds)
     return string.format("%02d:%02d:%02d", h, m, s)
 end
 
+-- [[ ПРЯМАЯ СИНХРОНИЗАЦИЯ С ТАБЛИЦЕЙ ]] --
 local function VerifyKey(key)
     local s, r = pcall(function() return game:HttpGet(API_URL .. "?check=" .. key .. "&hwid=" .. HWID) end)
     if s then
         CurrentKey = key
-        if r == "admin" then IsAdmin = true return "ok"
+        if r == "admin" then 
+            IsAdmin = true 
+            return "ok"
         elseif r:find("valid") then
-            ExpiryTimestamp = tonumber(string.split(r, "|")[2]) / 1000
-            IsAdmin = false return "ok"
+            local data = string.split(r, "|")
+            -- Принудительно конвертируем время из мс в сек и синхронизируем с os.time()
+            ExpiryTimestamp = tonumber(data[2]) / 1000
+            IsAdmin = false 
+            return "ok"
         end
     end
     return "invalid"
 end
 
--- [[ ФУНКЦИЯ АНИМАЦИИ ЗАКРЫТИЯ/ОТКРЫТИЯ ]] --
+local MainFrame = nil
 local function ToggleMenu()
     if not MainFrame then return end
     MenuVisible = not MenuVisible
-    
     local targetSize = MenuVisible and UDim2.new(0, 320, 0, 500) or UDim2.new(0, 320, 0, 0)
     local targetTransparency = MenuVisible and 0 or 1
-    
     local tweenInfo = TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
     
-    -- Анимируем размер и прозрачность
-    TweenService:Create(MainFrame, tweenInfo, {
-        Size = targetSize,
-        BackgroundTransparency = targetTransparency
-    }):Play()
-    
-    -- Прячем контент, чтобы он не торчал при сворачивании
+    TweenService:Create(MainFrame, tweenInfo, {Size = targetSize, BackgroundTransparency = targetTransparency}):Play()
     for _, item in pairs(MainFrame:GetChildren()) do
         if item:IsA("GuiObject") then
-            TweenService:Create(item, tweenInfo, {
-                GroupTransparency = targetTransparency -- Используем Group если есть, или просто Visible
-            }):Play()
-            if not MenuVisible then
-                task.delay(0.3, function() if not MenuVisible then item.Visible = false end end)
-            else
-                item.Visible = true
-            end
+            item.Visible = MenuVisible
         end
     end
-    
-    if MenuVisible then 
-        MainFrame.Visible = true 
-    else
-        task.delay(0.3, function() if not MenuVisible then MainFrame.Visible = false end end)
-    end
+    if MenuVisible then MainFrame.Visible = true else task.delay(0.3, function() if not MenuVisible then MainFrame.Visible = false end end) end
 end
 
--- UI Элементы (CreateToggle, CreateSlider и т.д. остаются прежними)
+-- Вспомогательные функции UI (Toggle, Slider)
 local function CreateToggle(parent, name, prop)
     local B = Instance.new("TextButton", parent)
     B.Size = UDim2.new(0.9, 0, 0, 45); B.Font = "GothamBold"; B.TextColor3 = Colors.White; B.TextSize = 16
@@ -151,7 +138,6 @@ local function CreateSlider(parent, name, prop, min, max)
     end)
 end
 
-MainFrame = nil
 function BuildMenu()
     if CoreGui:FindFirstChild("IlliaV3_Menu") then CoreGui.IlliaV3_Menu:Destroy() end
     local G = Instance.new("ScreenGui", CoreGui); G.Name = "IlliaV3_Menu"
@@ -159,7 +145,7 @@ function BuildMenu()
     MainFrame = Instance.new("ScrollingFrame", G)
     MainFrame.Size = UDim2.new(0, 320, 0, 500); MainFrame.Position = UDim2.new(0.5, -160, 0.5, -250)
     MainFrame.BackgroundColor3 = Colors.BG; MainFrame.AutomaticCanvasSize = "Y"; MainFrame.ScrollBarThickness = 0; MainFrame.BorderSizePixel = 0
-    MainFrame.ClipsDescendants = true -- Обязательно для анимации сворачивания
+    MainFrame.ClipsDescendants = true
     Instance.new("UICorner", MainFrame)
     
     local L = Instance.new("UIListLayout", MainFrame); L.Padding = UDim.new(0, 12); L.HorizontalAlignment = "Center"
@@ -187,14 +173,16 @@ function BuildMenu()
     RunService.RenderStepped:Connect(function()
         if G.Parent then
             local MousePos = UserInputService:GetMouseLocation()
+            
+            -- Логика таймера
             local left = IsAdmin and 0 or (ExpiryTimestamp - os.time())
             TimerLabel.Text = IsAdmin and "СТАТУС: БЕССРОЧНО" or "ОСТАЛОСЬ: " .. FormatTime(left)
 
+            -- Принудительная синхронизация каждые 30 сек
             if not IsAdmin and tick() - LastSync > 30 then
                 LastSync = tick()
                 task.spawn(function()
-                    local res = VerifyKey(CurrentKey)
-                    if res == "invalid" or (ExpiryTimestamp > 0 and left <= 0) then
+                    if VerifyKey(CurrentKey) == "invalid" or (ExpiryTimestamp > 0 and left <= 0) then
                         G:Destroy(); FOVCircle.Visible = false; ShowLogin()
                     end
                 end)
@@ -208,8 +196,7 @@ function BuildMenu()
                 for _, p in pairs(Players:GetPlayers()) do
                     if p ~= LocalPlayer and p.Character then
                         local h = p.Character:FindFirstChild("Highlight") or Instance.new("Highlight", p.Character)
-                        h.Enabled = true
-                        h.FillColor = Settings.ESP_Rainbow and Color3.fromHSV((tick()*0.5)%1, 0.8, 1) or Color3.fromHSV(Settings.ESP_Hue, 0.8, 1)
+                        h.Enabled = true; h.FillColor = Settings.ESP_Rainbow and Color3.fromHSV((tick()*0.5)%1, 0.8, 1) or Color3.fromHSV(Settings.ESP_Hue, 0.8, 1)
                     end
                 end
             end
@@ -247,11 +234,8 @@ function ShowLogin()
 end
 
 UserInputService.InputBegan:Connect(function(i, g)
-    if i.KeyCode == Enum.KeyCode.Insert then
-        ToggleMenu() -- Вызываем анимацию вместо простого Visible = not Visible
-    elseif not g and i.KeyCode == Enum.KeyCode[Settings.AimKey] then
-        AimbotActive = not AimbotActive
-    end
+    if i.KeyCode == Enum.KeyCode.Insert then ToggleMenu()
+    elseif not g and i.KeyCode == Enum.KeyCode[Settings.AimKey] then AimbotActive = not AimbotActive end
 end)
 
 if canSave and isfile(KEY_FILE) then
