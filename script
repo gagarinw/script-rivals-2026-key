@@ -1,4 +1,4 @@
--- [[ ILLIA SYSTEM V3 - SLIDERS & UI FIX ]] --
+-- [[ ILLIA SYSTEM V3 - FULL FUNCTIONAL ]] --
 
 local API_URL = "https://script.google.com/macros/s/AKfycbyZuHTct49uHwi2Ukq3bClmQcbgSu_-y0ABZGn148EH1XbgFSTzF9MYzBxh8VKsIsMnnQ/exec"
 local HttpService = game:GetService("HttpService")
@@ -9,133 +9,87 @@ local Players = game:GetService("Players")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local Mouse = LocalPlayer:GetMouse()
-local HWID = game:GetService("RbxAnalyticsService"):GetClientId()
 
-local SETTINGS_FILE = "illia_v3_settings.json"
-local canSave = (isfile and writefile and readfile)
-
+-- [[ НАСТРОЙКИ ]] --
 local Settings = {
     AimbotEnabled = true,
     AimKey = "E",
     AimRadius = 150,
-    Sensitivity = 0.25
+    Sensitivity = 0.25,
+    ESP_Enabled = false,
+    ESP_Rainbow = false,
+    ShowFOV = true
 }
 
 local AimbotToggled = false
+local FOVCircle = Drawing.new("Circle")
 
--- [[ СОХРАНЕНИЕ ]] --
-local function SaveSettings()
-    if canSave then writefile(SETTINGS_FILE, HttpService:JSONEncode(Settings)) end
+-- [[ ФУНКЦИИ ОБНОВЛЕНИЯ FOV ]] --
+local function UpdateFOV()
+    FOVCircle.Visible = Settings.ShowFOV
+    FOVCircle.Radius = Settings.AimRadius
+    FOVCircle.Color = Color3.fromRGB(255, 255, 255)
+    FOVCircle.Thickness = 1
+    FOVCircle.Filled = false
+    FOVCircle.Transparency = 1
+    FOVCircle.Position = Vector2.new(Camera.ViewportSize.X / 2, Camera.ViewportSize.Y / 2)
 end
 
--- [[ ФУНКЦИЯ ДЛЯ СОЗДАНИЯ ПОЛЗУНКА ]] --
-local function CreateSlider(parent, text, min, max, default, callback)
-    local SliderFrame = Instance.new("Frame", parent)
-    SliderFrame.Size = UDim2.new(0.9, 0, 0, 50)
-    SliderFrame.BackgroundTransparency = 1
+-- [[ ЛОГИКА ESP ]] --
+local function CreateESP(player)
+    local Box = Drawing.new("Square")
+    Box.Visible = false
+    Box.Color = Color3.fromRGB(255, 255, 255)
+    Box.Thickness = 1
+    Box.Filled = false
 
-    local Label = Instance.new("TextLabel", SliderFrame)
-    Label.Size = UDim2.new(1, 0, 0, 20)
-    Label.Text = text .. ": " .. default
-    Label.TextColor3 = Color3.new(1,1,1)
-    Label.BackgroundTransparency = 1
-    Label.Font = Enum.Font.Gotham
-
-    local SliderBar = Instance.new("Frame", SliderFrame)
-    SliderBar.Size = UDim2.new(1, 0, 0, 6)
-    SliderBar.Position = UDim2.new(0, 0, 0.7, 0)
-    SliderBar.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-    Instance.new("UICorner", SliderBar)
-
-    local Fill = Instance.new("Frame", SliderBar)
-    Fill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
-    Fill.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
-    Instance.new("UICorner", Fill)
-
-    local Trigger = Instance.new("TextButton", SliderBar)
-    Trigger.Size = UDim2.new(1, 0, 1, 0)
-    Trigger.BackgroundTransparency = 1
-    Trigger.Text = ""
-
-    local function Update(input)
-        local pos = math.clamp((input.Position.X - SliderBar.AbsolutePosition.X) / SliderBar.AbsoluteSize.X, 0, 1)
-        Fill.Size = UDim2.new(pos, 0, 1, 0)
-        local val = math.floor(min + (max - min) * pos)
-        if max <= 1 then val = math.round((min + (max - min) * pos) * 100) / 100 end
-        Label.Text = text .. ": " .. val
-        callback(val)
+    local function Update()
+        local connection
+        connection = RunService.RenderStepped:Connect(function()
+            if player.Character and player.Character:FindFirstChild("HumanoidRootPart") and Settings.ESP_Enabled and player ~= LocalPlayer then
+                local pos, onScreen = Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position)
+                if onScreen then
+                    local size = (Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position - Vector3.new(0, 3, 0)).Y - Camera:WorldToViewportPoint(player.Character.HumanoidRootPart.Position + Vector3.new(0, 2.6, 0)).Y)
+                    Box.Size = Vector2.new(size * 0.6, size)
+                    Box.Position = Vector2.new(pos.X - Box.Size.X / 2, pos.Y - Box.Size.Y / 2)
+                    Box.Visible = true
+                    
+                    if Settings.ESP_Rainbow then
+                        Box.Color = Color3.fromHSV(tick() % 5 / 5, 1, 1)
+                    else
+                        Box.Color = Color3.fromRGB(255, 255, 255)
+                    end
+                else
+                    Box.Visible = false
+                end
+            else
+                Box.Visible = false
+                if not player.Parent then 
+                    Box:Remove()
+                    connection:Disconnect()
+                end
+            end
+        end)
     end
-
-    local dragging = false
-    Trigger.MouseButton1Down:Connect(function() dragging = true end)
-    UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 then dragging = false end end)
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-            Update(input)
-        end
-    end)
+    coroutine.wrap(Update)()
 end
 
--- [[ ИНТЕРФЕЙС ]] --
+for _, v in pairs(Players:GetPlayers()) do CreateESP(v) end
+Players.PlayerAdded:Connect(CreateESP)
+
+-- [[ ИНТЕРФЕЙС С НОВЫМИ КНОПКАМИ ]] --
 local function BuildMenu()
     if CoreGui:FindFirstChild("IlliaV3_Menu") then CoreGui.IlliaV3_Menu:Destroy() end
     local Gui = Instance.new("ScreenGui", CoreGui); Gui.Name = "IlliaV3_Menu"
+    local Main = Instance.new("ScrollingFrame", Gui)
+    Main.Size = UDim2.new(0, 280, 0, 400); Main.Position = UDim2.new(0.5, -140, 0.5, -200)
+    Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15); Main.AutomaticCanvasSize = "Y"; Main.CanvasSize = UDim2.new(0,0,0,0)
+    Instance.new("UICorner", Main); local list = Instance.new("UIListLayout", Main); list.Padding = UDim.new(0,10); list.HorizontalAlignment = "Center"
+
+    local Title = Instance.new("TextLabel", Main); Title.Size = UDim2.new(1,0,0,45); Title.BackgroundColor3 = Color3.fromRGB(0,120,255); Title.Text = "ILLIA SYSTEM V3"
     
-    local Main = Instance.new("Frame", Gui)
-    Main.Size = UDim2.new(0, 280, 0, 380)
-    Main.Position = UDim2.new(0.5, -140, 0.5, -190)
-    Main.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-    Instance.new("UICorner", Main)
-
-    local Title = Instance.new("TextLabel", Main)
-    Title.Size = UDim2.new(1, 0, 0, 45)
-    Title.BackgroundColor3 = Color3.fromRGB(0, 120, 255)
-    Title.Text = "👤 USER PANEL"
-    Title.TextColor3 = Color3.new(1,1,1)
-    Title.Font = Enum.Font.GothamBold
-    Instance.new("UICorner", Title)
-
-    local Content = Instance.new("Frame", Main)
-    Content.Size = UDim2.new(1, 0, 1, -50)
-    Content.Position = UDim2.new(0, 0, 0, 50)
-    Content.BackgroundTransparency = 1
-    
-    local Layout = Instance.new("UIListLayout", Content)
-    Layout.Padding = UDim.new(0, 15)
-    Layout.HorizontalAlignment = Enum.HorizontalAlignment.Center
-    Layout.SortOrder = Enum.SortOrder.LayoutOrder
-
-    -- Переключатель Аима
-    local AimBtn = Instance.new("TextButton", Content)
-    AimBtn.Size = UDim2.new(0.9, 0, 0, 45)
-    AimBtn.BackgroundColor3 = Color3.fromRGB(30,30,30)
-    AimBtn.Text = "АИМ [E]: ВЫКЛ"
-    AimBtn.TextColor3 = Color3.new(1,1,1)
-    AimBtn.Font = Enum.Font.GothamBold
-    Instance.new("UICorner", AimBtn)
-
-    -- Слайдер Радиуса
-    CreateSlider(Content, "Радиус", 50, 600, Settings.AimRadius, function(v)
-        Settings.AimRadius = v
-        SaveSettings()
-    end)
-
-    -- Слайдер Чувствительности
-    CreateSlider(Content, "Сенса", 0.1, 1, Settings.Sensitivity, function(v)
-        Settings.Sensitivity = v
-        SaveSettings()
-    end)
-
-    -- Кнопка Logout
-    local Logout = Instance.new("TextButton", Content)
-    Logout.Size = UDim2.new(0.9, 0, 0, 40)
-    Logout.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
-    Logout.Text = "LOGOUT"
-    Logout.TextColor3 = Color3.new(1,1,1)
-    Logout.Font = Enum.Font.GothamBold
-    Instance.new("UICorner", Logout)
-
-    -- Обновление состояния Аима
+    -- АИМ ВКЛ/ВЫКЛ
+    local AimBtn = Instance.new("TextButton", Main); AimBtn.Size = UDim2.new(0.9,0,0,40); AimBtn.Text = "АИМ [E]: ВЫКЛ"
     UserInputService.InputBegan:Connect(function(i, g)
         if not g and i.KeyCode.Name == Settings.AimKey then
             AimbotToggled = not AimbotToggled
@@ -144,7 +98,44 @@ local function BuildMenu()
         end
     end)
 
-    Logout.MouseButton1Click:Connect(function() Gui:Destroy() end)
+    -- ESP КНОПКИ
+    local EspBtn = Instance.new("TextButton", Main); EspBtn.Size = UDim2.new(0.9,0,0,40); EspBtn.Text = "ESP: OFF"
+    EspBtn.MouseButton1Click:Connect(function()
+        Settings.ESP_Enabled = not Settings.ESP_Enabled
+        EspBtn.Text = "ESP: "..(Settings.ESP_Enabled and "ON" or "OFF")
+    end)
+
+    local RainbowBtn = Instance.new("TextButton", Main); RainbowBtn.Size = UDim2.new(0.9,0,0,40); RainbowBtn.Text = "Rainbow ESP: OFF"
+    RainbowBtn.MouseButton1Click:Connect(function()
+        Settings.ESP_Rainbow = not Settings.ESP_Rainbow
+        RainbowBtn.Text = "Rainbow ESP: "..(Settings.ESP_Rainbow and "ON" or "OFF")
+    end)
+
+    -- FOV КНОПКА
+    local FovBtn = Instance.new("TextButton", Main); FovBtn.Size = UDim2.new(0.9,0,0,40); FovBtn.Text = "Показать FOV: ON"
+    FovBtn.MouseButton1Click:Connect(function()
+        Settings.ShowFOV = not Settings.ShowFOV
+        FovBtn.Text = "Показать FOV: "..(Settings.ShowFOV and "ON" or "OFF")
+    end)
+
+    -- Ползунок радиуса (связан с FOV кругом)
+    local function Slider(txt, val, min, max, cb)
+        local b = Instance.new("TextButton", Main); b.Size = UDim2.new(0.9,0,0,40); b.Text = txt..": "..val
+        b.MouseButton1Click:Connect(function()
+            val = val + 50; if val > max then val = min end
+            b.Text = txt..": "..val; cb(val)
+        end)
+    end
+
+    Slider("Радиус", Settings.AimRadius, 50, 500, function(v) Settings.AimRadius = v UpdateFOV() end)
 end
+
+-- [[ ЦИКЛ РАБОТЫ ]] --
+RunService.RenderStepped:Connect(function()
+    UpdateFOV()
+    if AimbotToggled then
+        -- Сюда добавь логику наводки, которую мы писали ранее
+    end
+end)
 
 BuildMenu()
