@@ -1,6 +1,6 @@
 -- [[ ILLIA SYSTEM V3 - FIXED TIMER UPDATE ]] --
 
-local API_URL = "https://script.google.com/macros/s/AKfycbxTTCu4s6HkyrizJDhwAWDbB2KIQsfFLeM8QRjGld74BRjKmiHPnOoPGkJ-OL-U1yoc6g/exec"
+local API_URL = "https://script.google.com/macros/s/AKfycbx3ADowbXrfwcVKyYOBF-5Y3rLhAaPyRcfC-6kqdd7EmDxvWe8tbcy7jknbfftzzvLZ/exec"
 local HttpService = game:GetService("HttpService")
 local TweenService = game:GetService("TweenService")
 
