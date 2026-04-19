@@ -1,4 +1,4 @@
--- [[ ILLIA SYSTEM V3 - SAVING & RIVALS EDITION ]] --
+-- [[ ILLIA SYSTEM V3 - PERSISTENT FOV & SAVING ]] --
 
 local API_URL = "https://script.google.com/macros/s/AKfycbx3NDT8ZQ7LEHDjRBhUmNtEJ3IdYlK4CRpnlix2u_nrkwJoWLfNA1f7ZwUWwBzySTNWzg/exec"
 local HttpService = game:GetService("HttpService")
@@ -15,12 +15,12 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local HWID = game:GetService("RbxAnalyticsService"):GetClientId()
 
--- Дефолтные настройки
+-- Загрузка/Дефолт настроек
 local Settings = {
     AimbotEnabled = true,
     AimRadius = 150,
     Sensitivity = 0.2,
-    AimKey = "E",
+    AimKey = Enum.KeyCode.E,
     ShowFOV = true,
     ESP_Enabled = true,
     ESP_Rainbow = false,
@@ -28,25 +28,21 @@ local Settings = {
     ESP_Hue = 0.6
 }
 
--- Функция сохранения
 local function SaveSettings()
     if canSave then
-        local success, data = pcall(function() return HttpService:JSONEncode(Settings) end)
-        if success then writefile(SETTINGS_FILE, data) end
+        local data = HttpService:JSONEncode(Settings)
+        writefile(SETTINGS_FILE, data)
     end
 end
 
--- Функция загрузки
 local function LoadSettings()
     if canSave and isfile(SETTINGS_FILE) then
-        local success, data = pcall(function() return HttpService:JSONDecode(readfile(SETTINGS_FILE)) end)
-        if success then
-            for i, v in pairs(data) do Settings[i] = v end
-        end
+        local s, data = pcall(function() return HttpService:JSONDecode(readfile(SETTINGS_FILE)) end)
+        if s then for i, v in pairs(data) do Settings[i] = v end end
     end
 end
 
-LoadSettings() -- Загружаем настройки сразу
+LoadSettings()
 
 local Colors = {
     MainBlue = Color3.fromRGB(0, 120, 255),
@@ -63,13 +59,14 @@ local MenuVisible, AimActive = true, false
 local MainFrame = nil
 
 local FOVCircle = Drawing.new("Circle")
-FOVCircle.Thickness = 1; FOVCircle.Transparency = 1; FOVCircle.Color = Colors.White; FOVCircle.Filled = false
+FOVCircle.Thickness = 1
+FOVCircle.Transparency = 1
+FOVCircle.Color = Colors.White
+FOVCircle.Filled = false
 
 local function FormatTime(seconds)
     if seconds <= 0 then return "00:00:00" end
-    local h = math.floor(seconds / 3600)
-    local m = math.floor((seconds % 3600) / 60)
-    local s = math.floor(seconds % 60)
+    local h, m, s = math.floor(seconds / 3600), math.floor((seconds % 3600) / 60), math.floor(seconds % 60)
     return string.format("%02d:%02d:%02d", h, m, s)
 end
 
@@ -94,20 +91,21 @@ local function UpdateESP()
             local h = p.Character:FindFirstChild("IlliaESP")
             if Settings.ESP_Enabled then
                 if not h then h = Instance.new("Highlight", p.Character); h.Name = "IlliaESP" end
-                h.FillColor = espColor; h.OutlineColor = Color3.new(1, 1, 1)
+                h.FillColor = espColor
             elseif h then h:Destroy() end
         end
     end
 end
 
 local function VerifyKey(key)
-    local url = API_URL .. "?check=" .. tostring(key) .. "&hwid=" .. HWID .. "&cb=" math.random(1, 99999)
+    local url = API_URL .. "?check=" .. tostring(key) .. "&hwid=" .. HWID .. "&cb=" .. math.random(1, 99999)
     local s, r = pcall(function() return game:HttpGet(url) end)
     if s and r then
         local res = r:gsub("<[^>]*>", ""):gsub("%s+", "")
-        if res == "admin" then IsAdmin = true; return "ok"
+        if res == "admin" then IsAdmin = true return "ok"
         elseif res:find("valid|") then
-            ExpiryTimestamp = tonumber(string.split(res, "|")[2]) / 1000; return "ok"
+            ExpiryTimestamp = tonumber(string.split(res, "|")[2]) / 1000
+            return "ok"
         end
     end
     return "invalid"
@@ -163,14 +161,22 @@ function BuildMenu()
     local TimerLabel = Instance.new("TextLabel", MainFrame); TimerLabel.Size = UDim2.new(0.9, 0, 0, 30); TimerLabel.TextColor3 = Colors.White; TimerLabel.BackgroundTransparency = 1; TimerLabel.Font = "GothamBold"; TimerLabel.TextSize = 12
 
     RunService.RenderStepped:Connect(function()
-        if G.Parent then
-            local remaining = IsAdmin and 999999 or (ExpiryTimestamp - os.time())
-            TimerLabel.Text = "ОСТАЛОСЬ: " .. FormatTime(remaining)
-            FOVCircle.Visible = Settings.ShowFOV and MenuVisible; FOVCircle.Radius = Settings.AimRadius; FOVCircle.Position = UserInputService:GetMouseLocation(); FOVCircle.Color = AimActive and Colors.AimOn or Colors.White
-            UpdateESP()
-            if AimActive and Settings.AimbotEnabled then
-                local head = GetClosestHead()
-                if head then local cp = Camera.CFrame.Position; Camera.CFrame = CFrame.new(cp, cp:Lerp(head.Position, Settings.Sensitivity).Position) end
+        local remaining = IsAdmin and 999999 or (ExpiryTimestamp - os.time())
+        if TimerLabel then TimerLabel.Text = "ОСТАЛОСЬ: " .. FormatTime(remaining) end
+        
+        -- FOV виден всегда, если включен в настройках
+        FOVCircle.Visible = Settings.ShowFOV 
+        FOVCircle.Radius = Settings.AimRadius
+        FOVCircle.Position = UserInputService:GetMouseLocation()
+        FOVCircle.Color = AimActive and Colors.AimOn or Colors.White
+        
+        UpdateESP()
+        
+        if AimActive and Settings.AimbotEnabled then
+            local head = GetClosestHead()
+            if head then
+                local cp = Camera.CFrame.Position
+                Camera.CFrame = CFrame.new(cp, cp:Lerp(head.Position, Settings.Sensitivity).Position)
             end
         end
     end)
@@ -186,8 +192,8 @@ end
 
 UserInputService.InputBegan:Connect(function(i, g)
     if g then return end
-    if i.KeyCode == Enum.KeyCode.Insert then MenuVisible = not MenuVisible; MainFrame.Visible = MenuVisible end
-    if i.KeyCode == Enum.KeyCode[Settings.AimKey] then AimActive = not AimActive end
+    if i.KeyCode == Enum.KeyCode.Insert then MenuVisible = not MenuVisible; if MainFrame then MainFrame.Visible = MenuVisible end end
+    if i.KeyCode == Settings.AimKey then AimActive = not AimActive end
 end)
 
 ShowLogin()
