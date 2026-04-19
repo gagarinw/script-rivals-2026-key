@@ -1,4 +1,4 @@
--- [[ ILLIA SYSTEM V3 - RIVALS FULL VERSION ]] --
+-- [[ ILLIA SYSTEM V3 - TOGGLE EDITION ]] --
 
 local API_URL = "https://script.google.com/macros/s/AKfycbx3NDT8ZQ7LEHDjRBhUmNtEJ3IdYlK4CRpnlix2u_nrkwJoWLfNA1f7ZwUWwBzySTNWzg/exec"
 local HttpService = game:GetService("HttpService")
@@ -11,17 +11,17 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local HWID = game:GetService("RbxAnalyticsService"):GetClientId()
 
--- Проверка поддержки движения мыши (для аима)
+-- Проверка поддержки мыши
 local movemouse = mousemoverel or (Input and (Input.mousemove or Input.movemouse))
 
--- Файлы сохранения
+-- Файлы
 local canSave = (writefile and readfile and isfile)
 local KEY_FILE = "illia_v3_key.txt"
 local SETTINGS_FILE = "illia_v3_settings.json"
 
--- Настройки (твои параметры)
+-- Настройки (У = KeyCode.E)
 local Settings = {
-    AimbotEnabled = true,
+    AimbotEnabled = false, -- По умолчанию выключен
     TeamCheck = true, 
     ESP_Enabled = true,
     ESP_Rainbow = false,
@@ -30,9 +30,9 @@ local Settings = {
     ShowFOV = true,
     AimRadius = 150,
     Sensitivity = 0.3, 
-    AimPart = "Head", -- В Rivals также может быть "UpperTorso"
+    AimPart = "Head",
     MenuKey = Enum.KeyCode.Insert,
-    AimKey = Enum.KeyCode.E -- Кнопка активации аима
+    ToggleKey = Enum.KeyCode.E -- Это кнопка "У" на клавиатуре
 }
 
 local Colors = {
@@ -44,31 +44,37 @@ local Colors = {
 }
 
 local IsAdmin, ExpiryTimestamp = false, 0
-local AimActive = false
 local MainFrame = nil
+local AimButtonLink = nil -- Ссылка для обновления текста кнопки
 
--- Загрузка настроек
-if canSave and isfile(SETTINGS_FILE) then
-    pcall(function()
-        local data = HttpService:JSONDecode(readfile(SETTINGS_FILE))
-        for i, v in pairs(data) do Settings[i] = v end
-    end)
+-- Функции данных
+local function SaveData()
+    if canSave then
+        pcall(function() writefile(SETTINGS_FILE, HttpService:JSONEncode(Settings)) end)
+    end
 end
 
--- FOV КРУГ
+local function LoadData()
+    if canSave and isfile(SETTINGS_FILE) then
+        local s, data = pcall(function() return HttpService:JSONDecode(readfile(SETTINGS_FILE)) end)
+        if s then for i, v in pairs(data) do Settings[i] = v end end
+    end
+end
+LoadData()
+
+-- Визуал FOV
 local FOVCircle = Drawing.new("Circle")
 FOVCircle.Thickness = 1.5
 FOVCircle.Visible = false
 FOVCircle.Transparency = 1
 FOVCircle.Filled = false
 
--- Функция проверки врага
 local function IsEnemy(p)
     if not Settings.TeamCheck then return true end
     return p.Team ~= LocalPlayer.Team
 end
 
--- [[ ПРОВЕРКА КЛЮЧА ]] --
+-- Проверка ключа
 local function VerifyKey(key)
     local url = API_URL .. "?check=" .. tostring(key) .. "&hwid=" .. HWID .. "&cb=" .. math.random(1, 99999)
     local s, r = pcall(function() return game:HttpGet(url) end)
@@ -87,7 +93,7 @@ local function VerifyKey(key)
     return "invalid"
 end
 
--- [[ ПОИСК ЦЕЛИ (ТВОЯ ЛОГИКА) ]] --
+-- Аим (Твоя логика из Rivals)
 local function GetClosestTarget()
     local targetPos = nil
     local dist = Settings.AimRadius
@@ -96,9 +102,8 @@ local function GetClosestTarget()
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
             local char = p.Character
-            local hum = char:FindFirstChildOfClass("Humanoid")
-            -- Поиск части тела (поддержка Rivals Hitbox)
             local part = char:FindFirstChild(Settings.AimPart) or (char:FindFirstChild("Hitbox") and char.Hitbox:FindFirstChild(Settings.AimPart))
+            local hum = char:FindFirstChildOfClass("Humanoid")
 
             if part and hum and hum.Health > 0 and IsEnemy(p) then
                 local pos, vis = Camera:WorldToViewportPoint(part.Position)
@@ -115,38 +120,27 @@ local function GetClosestTarget()
     return targetPos
 end
 
--- [[ ОБНОВЛЕНИЕ ESP ]] --
-local function UpdateESP()
-    local espColor = Settings.ESP_Rainbow and Color3.fromHSV((tick() * (Settings.ESP_Speed * 0.2)) % 1, 0.8, 1) or Color3.fromHSV(Settings.ESP_Hue, 0.8, 1)
-    
-    for _, p in pairs(Players:GetPlayers()) do
-        if p ~= LocalPlayer and p.Character then
-            local highlight = p.Character:FindFirstChild("ILLIA_CHAMS")
-            if Settings.ESP_Enabled and IsEnemy(p) then
-                if not highlight then
-                    highlight = Instance.new("Highlight", p.Character)
-                    highlight.Name = "ILLIA_CHAMS"
-                    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
-                end
-                highlight.FillColor = espColor
-                highlight.OutlineColor = Color3.new(1,1,1)
-            elseif highlight then
-                highlight:Destroy()
-            end
-        end
-    end
-end
-
--- [[ ГЛАВНЫЙ ЦИКЛ ]] --
+-- Цикл
 RunService.RenderStepped:Connect(function()
     FOVCircle.Position = UserInputService:GetMouseLocation()
     FOVCircle.Radius = Settings.AimRadius
     FOVCircle.Visible = Settings.ShowFOV
-    FOVCircle.Color = AimActive and Colors.MainBlue or Color3.new(1, 1, 1)
+    FOVCircle.Color = Settings.AimbotEnabled and Colors.MainBlue or Color3.new(1, 1, 1)
 
-    UpdateESP()
+    -- ESP
+    local espColor = Settings.ESP_Rainbow and Color3.fromHSV((tick() * (Settings.ESP_Speed * 0.1)) % 1, 0.8, 1) or Color3.fromHSV(Settings.ESP_Hue, 0.8, 1)
+    for _, p in pairs(Players:GetPlayers()) do
+        if p ~= LocalPlayer and p.Character then
+            local h = p.Character:FindFirstChild("ILLIA_CHAMS")
+            if Settings.ESP_Enabled and IsEnemy(p) then
+                if not h then h = Instance.new("Highlight", p.Character); h.Name = "ILLIA_CHAMS" end
+                h.FillColor = espColor
+            elseif h then h:Destroy() end
+        end
+    end
 
-    if AimActive and Settings.AimbotEnabled and movemouse then
+    -- Работа Аима (теперь только если Enabled == true)
+    if Settings.AimbotEnabled and movemouse then
         local target = GetClosestTarget()
         if target then
             local mouseLoc = UserInputService:GetMouseLocation()
@@ -156,21 +150,17 @@ RunService.RenderStepped:Connect(function()
     end
 end)
 
--- [[ МЕНЮ ]] --
+-- Меню
 function BuildMenu()
     if CoreGui:FindFirstChild("IlliaMenuV3") then CoreGui.IlliaMenuV3:Destroy() end
     local MainGui = Instance.new("ScreenGui", CoreGui); MainGui.Name = "IlliaMenuV3"
     
     MainFrame = Instance.new("Frame", MainGui)
-    MainFrame.BackgroundColor3 = Colors.Background
-    MainFrame.Size = UDim2.new(0, 280, 0, 520)
-    MainFrame.Position = UDim2.new(0.5, -140, 0.5, -260)
+    MainFrame.BackgroundColor3 = Colors.Background; MainFrame.Size = UDim2.new(0, 280, 0, 500); MainFrame.Position = UDim2.new(0.5, -140, 0.5, -250)
     Instance.new("UICorner", MainFrame)
 
     local Title = Instance.new("TextLabel", MainFrame)
-    Title.Size = UDim2.new(1, 0, 0, 50); Title.Text = "ILLIA V3"; Title.TextColor3 = Color3.new(1, 1, 1)
-    Title.BackgroundColor3 = Colors.TitleBar; Title.Font = "GothamBold"; Title.TextSize = 24
-    Instance.new("UICorner", Title)
+    Title.Size = UDim2.new(1, 0, 0, 50); Title.Text = "ILLIA V3"; Title.TextColor3 = Color3.new(1, 1, 1); Title.BackgroundColor3 = Colors.TitleBar; Title.Font = "GothamBold"; Title.TextSize = 22; Instance.new("UICorner", Title)
 
     local UIList = Instance.new("UIListLayout", MainFrame); UIList.Padding = UDim.new(0, 8); UIList.HorizontalAlignment = "Center"
     Instance.new("UIPadding", MainFrame).PaddingTop = UDim.new(0, 60)
@@ -182,26 +172,25 @@ function BuildMenu()
             btn.Text = text .. ": " .. (Settings[prop] and "ON" or "OFF")
             btn.BackgroundColor3 = Settings[prop] and Colors.DarkBlue or Colors.Purple
         end
-        btn.MouseButton1Click:Connect(function() Settings[prop] = not Settings[prop]; upd(); if canSave then writefile(SETTINGS_FILE, HttpService:JSONEncode(Settings)) end end)
+        btn.MouseButton1Click:Connect(function() Settings[prop] = not Settings[prop]; upd(); SaveData() end)
+        if prop == "AimbotEnabled" then AimButtonLink = upd end -- Сохраняем ссылку для обновления
         upd(); Instance.new("UICorner", btn)
     end
 
     local function CreateSlider(text, prop, min, max)
         local f = Instance.new("Frame", MainFrame); f.Size = UDim2.new(0.9, 0, 0, 45); f.BackgroundTransparency = 1
-        local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1, 0, 0, 20); l.TextColor3 = Color3.new(1, 1, 1); l.TextSize = 12; l.Font = "GothamBold"; l.BackgroundTransparency = 1
-        local b = Instance.new("Frame", f); b.Size = UDim2.new(1, 0, 0, 5); b.Position = UDim2.new(0, 0, 0, 30); b.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-        local fill = Instance.new("Frame", b); fill.BackgroundColor3 = Colors.MainBlue
-        local k = Instance.new("TextButton", b); k.Size = UDim2.new(0, 12, 0, 12); k.Text = ""
-        Instance.new("UICorner", b); Instance.new("UICorner", fill); Instance.new("UICorner", k)
+        local l = Instance.new("TextLabel", f); l.Size = UDim2.new(1, 0, 0, 20); l.TextColor3 = Color3.new(1, 1, 1); l.TextSize = 11; l.Font = "GothamBold"; l.BackgroundTransparency = 1
+        local b = Instance.new("Frame", f); b.Size = UDim2.new(1, 0, 0, 5); b.Position = UDim2.new(0, 0, 0, 30); b.BackgroundColor3 = Color3.fromRGB(40, 40, 40); Instance.new("UICorner", b)
+        local fill = Instance.new("Frame", b); fill.BackgroundColor3 = Colors.MainBlue; Instance.new("UICorner", fill)
+        local k = Instance.new("TextButton", b); k.Size = UDim2.new(0, 12, 0, 12); k.Text = ""; Instance.new("UICorner", k)
         
         local function upd(val)
             local p = (val - min) / (max - min)
-            fill.Size = UDim2.new(p, 0, 1, 0); k.Position = UDim2.new(p, -6, 0.5, -6)
-            l.Text = text .. ": " .. tostring(val)
+            fill.Size = UDim2.new(p, 0, 1, 0); k.Position = UDim2.new(p, -6, 0.5, -6); l.Text = text .. ": " .. tostring(val)
         end
         local drag = false
         k.MouseButton1Down:Connect(function() drag = true end)
-        UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false; if canSave then writefile(SETTINGS_FILE, HttpService:JSONEncode(Settings)) end end end)
+        UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false; SaveData() end end)
         UserInputService.InputChanged:Connect(function(i)
             if drag and i.UserInputType == Enum.UserInputType.MouseMovement then
                 local p = math.clamp((i.Position.X - b.AbsolutePosition.X) / b.AbsoluteSize.X, 0, 1)
@@ -212,17 +201,14 @@ function BuildMenu()
         upd(Settings[prop])
     end
 
+    CreateButton("Aimbot (Key: У)", "AimbotEnabled")
     CreateButton("Team Check", "TeamCheck")
     CreateButton("ESP Master", "ESP_Enabled")
     CreateButton("ESP Rainbow", "ESP_Rainbow")
-    CreateSlider("ESP Hue", "ESP_Hue", 0, 1)
-    CreateSlider("ESP Speed", "ESP_Speed", 1, 10)
-    CreateButton("Show FOV", "ShowFOV")
     CreateSlider("FOV Radius", "AimRadius", 50, 500)
     CreateSlider("Aim Speed", "Sensitivity", 0.05, 1)
 end
 
--- [[ ВХОД ]] --
 function ShowLogin()
     local SG = Instance.new("ScreenGui", CoreGui)
     local F = Instance.new("Frame", SG); F.Size = UDim2.new(0, 300, 0, 160); F.Position = UDim2.new(0.5, -150, 0.5, -80); F.BackgroundColor3 = Colors.Background; Instance.new("UICorner", F)
@@ -233,21 +219,20 @@ function ShowLogin()
         local k = readfile(KEY_FILE)
         if VerifyKey(k) == "ok" then SG:Destroy(); BuildMenu() return end
     end
-
     B.MouseButton1Click:Connect(function()
         if VerifyKey(T.Text) == "ok" then SG:Destroy(); BuildMenu() else B.Text = "ОШИБКА"; task.wait(1); B.Text = "ВОЙТИ" end
     end)
 end
 
--- [[ УПРАВЛЕНИЕ ]] --
+-- Обработка переключения на У (KeyCode.E)
 UserInputService.InputBegan:Connect(function(i, g)
     if g then return end
+    if i.KeyCode == Settings.ToggleKey then
+        Settings.AimbotEnabled = not Settings.AimbotEnabled
+        if AimButtonLink then AimButtonLink() end -- Обновляем кнопку в меню
+        SaveData()
+    end
     if i.KeyCode == Settings.MenuKey then if MainFrame then MainFrame.Parent.Enabled = not MainFrame.Parent.Enabled end end
-    if i.KeyCode == Settings.AimKey then AimActive = true end
-end)
-
-UserInputService.InputEnded:Connect(function(i)
-    if i.KeyCode == Settings.AimKey then AimActive = false end
 end)
 
 ShowLogin()
