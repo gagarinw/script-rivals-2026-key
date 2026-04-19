@@ -1,4 +1,4 @@
--- [[ ILLIA SYSTEM V3 - PERSISTENT FOV & SAVING ]] --
+-- [[ ILLIA SYSTEM V3 - UPDATED ESP & VISUALS ]] --
 
 local API_URL = "https://script.google.com/macros/s/AKfycbx3NDT8ZQ7LEHDjRBhUmNtEJ3IdYlK4CRpnlix2u_nrkwJoWLfNA1f7ZwUWwBzySTNWzg/exec"
 local HttpService = game:GetService("HttpService")
@@ -15,7 +15,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local HWID = game:GetService("RbxAnalyticsService"):GetClientId()
 
--- Загрузка/Дефолт настроек
+-- Настройки по умолчанию
 local Settings = {
     AimbotEnabled = true,
     AimRadius = 150,
@@ -23,9 +23,9 @@ local Settings = {
     AimKey = Enum.KeyCode.E,
     ShowFOV = true,
     ESP_Enabled = true,
-    ESP_Rainbow = false,
-    ESP_Speed = 1,
-    ESP_Hue = 0.6
+    ESP_Rainbow = false,   -- Кнопка радуги
+    ESP_Speed = 1,         -- Ползунок скорости
+    ESP_Hue = 0.6          -- Ползунок цвета (оттенок)
 }
 
 local function SaveSettings()
@@ -49,7 +49,6 @@ local Colors = {
     BG = Color3.fromRGB(15, 15, 15),
     White = Color3.fromRGB(255, 255, 255),
     LogoutRed = Color3.fromRGB(200, 50, 50),
-    SuccessGreen = Color3.fromRGB(40, 200, 40),
     Dark = Color3.fromRGB(25, 25, 25),
     AimOn = Color3.fromRGB(0, 255, 100)
 }
@@ -84,15 +83,32 @@ local function GetClosestHead()
     return closest
 end
 
+-- Логика обновления ESP
 local function UpdateESP()
-    local espColor = Settings.ESP_Rainbow and Color3.fromHSV((tick() * Settings.ESP_Speed % 5) / 5, 1, 1) or Color3.fromHSV(Settings.ESP_Hue, 0.8, 1)
+    local espColor
+    if Settings.ESP_Rainbow then
+        -- Радуга (используем tick() и скорость)
+        espColor = Color3.fromHSV((tick() * (Settings.ESP_Speed * 0.2)) % 1, 0.8, 1)
+    else
+        -- Статический цвет из ползунка Hue
+        espColor = Color3.fromHSV(Settings.ESP_Hue, 0.8, 1)
+    end
+
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
             local h = p.Character:FindFirstChild("IlliaESP")
             if Settings.ESP_Enabled then
-                if not h then h = Instance.new("Highlight", p.Character); h.Name = "IlliaESP" end
+                if not h then 
+                    h = Instance.new("Highlight", p.Character)
+                    h.Name = "IlliaESP"
+                    h.OutlineTransparency = 0
+                    h.FillTransparency = 0.5
+                end
                 h.FillColor = espColor
-            elseif h then h:Destroy() end
+                h.OutlineColor = espColor
+            elseif h then 
+                h:Destroy() 
+            end
         end
     end
 end
@@ -115,7 +131,7 @@ function BuildMenu()
     if CoreGui:FindFirstChild("IlliaV3_Menu") then CoreGui.IlliaV3_Menu:Destroy() end
     local G = Instance.new("ScreenGui", CoreGui); G.Name = "IlliaV3_Menu"
     MainFrame = Instance.new("ScrollingFrame", G)
-    MainFrame.Size = UDim2.new(0, 320, 0, 520); MainFrame.Position = UDim2.new(0.5, -160, 0.5, -260); MainFrame.BackgroundColor3 = Colors.BG; MainFrame.AutomaticCanvasSize = "Y"; MainFrame.ScrollBarThickness = 0; MainFrame.BorderSizePixel = 0
+    MainFrame.Size = UDim2.new(0, 320, 0, 550); MainFrame.Position = UDim2.new(0.5, -160, 0.5, -275); MainFrame.BackgroundColor3 = Colors.BG; MainFrame.AutomaticCanvasSize = "Y"; MainFrame.ScrollBarThickness = 0; MainFrame.BorderSizePixel = 0
     Instance.new("UICorner", MainFrame)
     local L = Instance.new("UIListLayout", MainFrame); L.Padding = UDim.new(0, 10); L.HorizontalAlignment = "Center"
     Instance.new("UIPadding", MainFrame).PaddingTop = UDim.new(0, 15)
@@ -143,16 +159,16 @@ function BuildMenu()
         B.MouseButton1Click:Connect(function() Settings[prop] = not Settings[prop]; B.Text = name .. ": " .. (Settings[prop] and "ВКЛ" or "ВЫКЛ"); B.BackgroundColor3 = Settings[prop] and Colors.MainBlue or Colors.Dark; SaveSettings() end)
     end
 
+    -- Интерфейс (как на скрине)
     CreateSlider("Радиус", "AimRadius", 50, 800)
     CreateSlider("Плавность", "Sensitivity", 0.1, 1)
     CreateToggle("FOV Круг", "ShowFOV")
     CreateToggle("ESP Игроки", "ESP_Enabled")
     
-    if IsAdmin then
-        CreateToggle("Радужный ESP", "ESP_Rainbow")
-        CreateSlider("Скорость Радуги", "ESP_Speed", 0.1, 5)
-        CreateSlider("Цвет ESP (Hue)", "ESP_Hue", 0, 1)
-    end
+    -- Новые настройки ESP
+    CreateToggle("Радужный ESP", "ESP_Rainbow")
+    CreateSlider("Скорость переливания", "ESP_Speed", 0.1, 10)
+    CreateSlider("Цвет ESP (Оттенок)", "ESP_Hue", 0, 1)
 
     local Out = Instance.new("TextButton", MainFrame); Out.Size = UDim2.new(0.9, 0, 0, 45); Out.BackgroundColor3 = Colors.LogoutRed; Out.Text = "LOGOUT"; Out.TextColor3 = Colors.White; Out.Font = "GothamBold"; Instance.new("UICorner", Out)
     Out.MouseButton1Click:Connect(function() G:Destroy(); AimActive = false; if canSave then pcall(function() delfile(KEY_FILE) end) end; ShowLogin() end)
@@ -164,7 +180,6 @@ function BuildMenu()
         local remaining = IsAdmin and 999999 or (ExpiryTimestamp - os.time())
         if TimerLabel then TimerLabel.Text = "ОСТАЛОСЬ: " .. FormatTime(remaining) end
         
-        -- FOV виден всегда, если включен в настройках
         FOVCircle.Visible = Settings.ShowFOV 
         FOVCircle.Radius = Settings.AimRadius
         FOVCircle.Position = UserInputService:GetMouseLocation()
