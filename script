@@ -1,4 +1,4 @@
--- [[ ILLIA SYSTEM V3 - ORIGINAL COLORS & FIX ]] --
+-- [[ ILLIA SYSTEM V3 - FULL SCRIPT FIX ]] --
 
 local API_URL = "https://script.google.com/macros/s/AKfycbx3NDT8ZQ7LEHDjRBhUmNtEJ3IdYlK4CRpnlix2u_nrkwJoWLfNA1f7ZwUWwBzySTNWzg/exec"
 local HttpService = game:GetService("HttpService")
@@ -13,22 +13,24 @@ local KEY_FILE = "illia_v3_key.txt"
 local SETTINGS_FILE = "illia_v3_settings.json"
 
 local LocalPlayer = Players.LocalPlayer
+local Camera = workspace.CurrentCamera
 local HWID = game:GetService("RbxAnalyticsService"):GetClientId()
 
--- Настройки
+-- Твои оригинальные настройки
 local Settings = {
     AimbotEnabled = true,
     AimRadius = 150,
-    Sensitivity = 0.2, 
-    AimKey = "T",
+    Sensitivity = 0.1,
+    AimKey = "E",
     ShowFOV = true,
     ESP_Enabled = true,
+    ESP_Rainbow = false,
     ESP_Hue = 0.6
 }
 
--- ВОЗВРАЩЕННЫЕ ЦВЕТА ИЗ ТВОЕГО СКРИПТА
+-- Твоя оригинальная палитра
 local Colors = {
-    MainBlue = Color3.fromRGB(0, 120, 255), -- Тот самый синий
+    MainBlue = Color3.fromRGB(0, 120, 255),
     AdminGold = Color3.fromRGB(255, 200, 0),
     BG = Color3.fromRGB(15, 15, 15),
     White = Color3.fromRGB(255, 255, 255),
@@ -50,7 +52,7 @@ end
 
 LoadSettings()
 
-local IsAdmin, ExpiryTimestamp = false, 0
+local IsAdmin, ExpiryTimestamp, AimbotActive = false, 0, false
 local MenuVisible = true
 local MainFrame = nil
 
@@ -60,12 +62,6 @@ FOVCircle.Transparency = 1
 FOVCircle.Color = Colors.White
 FOVCircle.Filled = false
 
--- Чистка ответа
-local function CleanResponse(text)
-    if not text then return "" end
-    return text:gsub("<[^>]*>", ""):gsub("%s+", "")
-end
-
 local function FormatTime(seconds)
     if seconds <= 0 then return "00:00:00" end
     local h = math.floor(seconds / 3600)
@@ -74,28 +70,27 @@ local function FormatTime(seconds)
     return string.format("%02d:%02d:%02d", h, m, s)
 end
 
--- ИСПРАВЛЕННАЯ ПРОВЕРКА (Убрал возможные причины "ОШИБКИ")
+-- ИСПРАВЛЕННАЯ ФУНКЦИЯ ПРОВЕРКИ (Убрана причина вечной "ОШИБКИ")
 local function VerifyKey(key)
-    if key == "" then return "invalid" end
+    -- Глубокая очистка ключа и добавление анти-кэша
+    local cleanKey = tostring(key):gsub("%s+", "")
+    local url = API_URL .. "?check=" .. cleanKey .. "&hwid=" .. HWID .. "&cb=" .. math.random(1, 99999)
     
-    local url = API_URL .. "?check=" .. tostring(key) .. "&hwid=" .. HWID .. "&cb=" .. math.random(1, 99999)
-    local success, response = pcall(function() 
-        return game:HttpGet(url) 
-    end)
+    local s, r = pcall(function() return game:HttpGet(url) end)
     
-    if success and response then
-        local clean = CleanResponse(response)
+    if s and r then
+        -- Убираем из ответа любой мусор, который может слать Google
+        local cleanResponse = r:gsub("<[^>]*>", ""):gsub("%s+", "")
         
-        if clean == "admin" then
-            IsAdmin = true
+        if cleanResponse == "admin" then 
+            IsAdmin = true 
             if canSave then writefile(KEY_FILE, key) end
             return "ok"
-        elseif clean:find("valid|") then
-            local split = string.split(clean, "|")
-            local timeVal = tonumber(split[2])
-            if timeVal then
-                ExpiryTimestamp = timeVal / 1000
-                IsAdmin = false
+        elseif cleanResponse:find("valid|") then
+            local data = string.split(cleanResponse, "|")
+            if data[2] and tonumber(data[2]) then
+                ExpiryTimestamp = tonumber(data[2]) / 1000
+                IsAdmin = false 
                 if canSave then writefile(KEY_FILE, key) end
                 return "ok"
             end
@@ -104,15 +99,57 @@ local function VerifyKey(key)
     return "invalid"
 end
 
+local function ToggleMenu()
+    if not MainFrame then return end
+    MenuVisible = not MenuVisible
+    local targetSize = MenuVisible and UDim2.new(0, 320, 0, 500) or UDim2.new(0, 320, 0, 0)
+    TweenService:Create(MainFrame, TweenInfo.new(0.3), {Size = targetSize}):Play()
+    for _, item in pairs(MainFrame:GetChildren()) do
+        if item:IsA("GuiObject") then item.Visible = MenuVisible end
+    end
+end
+
+local function CreateToggle(parent, name, prop)
+    local B = Instance.new("TextButton", parent)
+    B.Size = UDim2.new(0.9, 0, 0, 45); B.Font = "GothamBold"; B.TextColor3 = Colors.White; B.TextSize = 14
+    B.BackgroundColor3 = Settings[prop] and Colors.MainBlue or Colors.Dark
+    B.Text = name .. ": " .. (Settings[prop] and "ВКЛ" or "ВЫКЛ")
+    Instance.new("UICorner", B).CornerRadius = UDim.new(0, 8)
+    B.MouseButton1Click:Connect(function()
+        Settings[prop] = not Settings[prop]
+        B.Text = name .. ": " .. (Settings[prop] and "ВКЛ" or "ВЫКЛ")
+        B.BackgroundColor3 = Settings[prop] and Colors.MainBlue or Colors.Dark
+        SaveSettings()
+    end)
+end
+
+local function CreateSlider(parent, name, prop, min, max)
+    local F = Instance.new("Frame", parent); F.Size = UDim2.new(0.9, 0, 0, 60); F.BackgroundTransparency = 1
+    local L = Instance.new("TextLabel", F); L.Size = UDim2.new(1, 0, 0, 20); L.Text = name .. ": " .. Settings[prop]; L.TextColor3 = Colors.White; L.Font = "GothamBold"; L.BackgroundTransparency = 1
+    local B = Instance.new("Frame", F); B.Size = UDim2.new(1, 0, 0, 6); B.Position = UDim2.new(0,0,0.7,0); B.BackgroundColor3 = Colors.Dark; Instance.new("UICorner", B)
+    local Fill = Instance.new("Frame", B); Fill.Size = UDim2.new((Settings[prop]-min)/(max-min), 0, 1, 0); Fill.BackgroundColor3 = Colors.MainBlue; Instance.new("UICorner", Fill)
+    local Btn = Instance.new("TextButton", B); Btn.Size = UDim2.new(1,0,1,0); Btn.BackgroundTransparency = 1; Btn.Text = ""
+    local drag = false
+    Btn.MouseButton1Down:Connect(function() drag = true end)
+    UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false SaveSettings() end end)
+    UserInputService.InputChanged:Connect(function(i)
+        if drag and i.UserInputType == Enum.UserInputType.MouseMovement then
+            local p = math.clamp((i.Position.X - B.AbsolutePosition.X) / B.AbsoluteSize.X, 0, 1)
+            Fill.Size = UDim2.new(p, 0, 1, 0)
+            local v = math.round((min + (max-min)*p)*10)/10
+            Settings[prop] = v; L.Text = name .. ": " .. v
+        end
+    end)
+end
+
 function BuildMenu()
     if CoreGui:FindFirstChild("IlliaV3_Menu") then CoreGui.IlliaV3_Menu:Destroy() end
     local G = Instance.new("ScreenGui", CoreGui); G.Name = "IlliaV3_Menu"
     
     MainFrame = Instance.new("ScrollingFrame", G)
     MainFrame.Size = UDim2.new(0, 320, 0, 500); MainFrame.Position = UDim2.new(0.5, -160, 0.5, -250)
-    MainFrame.BackgroundColor3 = Colors.BG; MainFrame.AutomaticCanvasSize = "Y"; MainFrame.ScrollBarThickness = 0; MainFrame.BorderSizePixel = 0
+    MainFrame.BackgroundColor3 = Colors.BG; MainFrame.AutomaticCanvasSize = "Y"; MainFrame.ScrollBarThickness = 0
     Instance.new("UICorner", MainFrame)
-    
     local L = Instance.new("UIListLayout", MainFrame); L.Padding = UDim.new(0, 10); L.HorizontalAlignment = "Center"
     Instance.new("UIPadding", MainFrame).PaddingTop = UDim.new(0, 15)
 
@@ -122,26 +159,22 @@ function BuildMenu()
 
     local TimerLabel = Instance.new("TextLabel", MainFrame); TimerLabel.Size = UDim2.new(0.9, 0, 0, 30); TimerLabel.TextColor3 = Colors.White; TimerLabel.BackgroundTransparency = 1; TimerLabel.Font = "GothamBold"
 
-    -- Слайдеры и кнопки (Цвет заменен на оригинальный синий)
-    local function AddToggle(name, prop)
-        local B = Instance.new("TextButton", MainFrame)
-        B.Size = UDim2.new(0.9, 0, 0, 45); B.Font = "GothamBold"; B.TextColor3 = Colors.White; B.TextSize = 14
-        B.BackgroundColor3 = Settings[prop] and Colors.MainBlue or Colors.Dark
-        B.Text = name .. ": " .. (Settings[prop] and "ВКЛ" or "ВЫКЛ")
-        Instance.new("UICorner", B)
-        B.MouseButton1Click:Connect(function()
-            Settings[prop] = not Settings[prop]
-            B.Text = name .. ": " .. (Settings[prop] and "ВКЛ" or "ВЫКЛ")
-            B.BackgroundColor3 = Settings[prop] and Colors.MainBlue or Colors.Dark
-            SaveSettings()
-        end)
-    end
+    local GetKey = Instance.new("TextButton", MainFrame)
+    GetKey.Size = UDim2.new(0.9, 0, 0, 40); GetKey.BackgroundColor3 = Color3.fromRGB(0, 60, 180); GetKey.Text = "ПОЛУЧИТЬ КЛЮЧ (САЙТ)"; GetKey.TextColor3 = Colors.White; GetKey.Font = "GothamBold"; Instance.new("UICorner", GetKey)
+    GetKey.MouseButton1Click:Connect(function()
+        if setclipboard then setclipboard(API_URL) end
+        GetKey.Text = "ССЫЛКА СКОПИРОВАНА!"
+        task.wait(2)
+        GetKey.Text = "ПОЛУЧИТЬ КЛЮЧ (САЙТ)"
+    end)
 
-    AddToggle("FOV Круг", "ShowFOV")
-    AddToggle("ESP Игроки", "ESP_Enabled")
+    CreateSlider(MainFrame, "Радиус", "AimRadius", 50, 800)
+    CreateSlider(MainFrame, "Плавность", "Sensitivity", 0.01, 1)
+    CreateToggle(MainFrame, "FOV Круг", "ShowFOV")
+    CreateToggle(MainFrame, "ESP Игроки", "ESP_Enabled")
 
     local Out = Instance.new("TextButton", MainFrame); Out.Size = UDim2.new(0.9, 0, 0, 40); Out.BackgroundColor3 = Colors.LogoutRed; Out.Text = "LOGOUT"; Out.TextColor3 = Colors.White; Out.Font = "GothamBold"; Instance.new("UICorner", Out)
-    Out.MouseButton1Click:Connect(function() G:Destroy(); FOVCircle.Visible = false; if canSave then pcall(function() delfile(KEY_FILE) end) end; ShowLogin() end)
+    Out.MouseButton1Click:Connect(function() G:Destroy(); if canSave then pcall(function() delfile(KEY_FILE) end) end; ShowLogin() end)
 
     RunService.RenderStepped:Connect(function()
         if G.Parent then
@@ -156,32 +189,23 @@ end
 function ShowLogin()
     if CoreGui:FindFirstChild("IlliaLogin") then CoreGui.IlliaLogin:Destroy() end
     local A = Instance.new("ScreenGui", CoreGui); A.Name = "IlliaLogin"
-    local B = Instance.new("Frame", A); B.Size = UDim2.new(0, 320, 0, 240); B.Position = UDim2.new(0.5,-160,0.5,-120); B.BackgroundColor3 = Colors.BG; Instance.new("UICorner", B)
-    
-    local Title = Instance.new("TextLabel", B); Title.Size = UDim2.new(1, 0, 0, 50); Title.Text = "Здраствуйте! Спасибо что выбрали мой чит"; Title.TextColor3 = Colors.MainBlue; Title.BackgroundTransparency = 1; Title.Font = "GothamBold"; Title.TextSize = 13
-
-    local I = Instance.new("TextBox", B); I.Size = UDim2.new(0.8,0,0,45); I.Position = UDim2.new(0.1,0,0.3,0); I.PlaceholderText = "Введите ключ..."; I.BackgroundColor3 = Colors.Dark; I.TextColor3 = Colors.White; Instance.new("UICorner", I)
-    
-    local S = Instance.new("TextButton", B); S.Size = UDim2.new(0.8,0,0,45); S.Position = UDim2.new(0.1,0,0.65,0); S.BackgroundColor3 = Colors.MainBlue; S.Text = "ВОЙТИ"; S.TextColor3 = Colors.White; Instance.new("UICorner", S)
+    local B = Instance.new("Frame", A); B.Size = UDim2.new(0, 320, 0, 220); B.Position = UDim2.new(0.5,-160,0.5,-110); B.BackgroundColor3 = Colors.BG; Instance.new("UICorner", B)
+    local I = Instance.new("TextBox", B); I.Size = UDim2.new(0.8,0,0,45); I.Position = UDim2.new(0.1,0,0.2,0); I.PlaceholderText = "Введите ключ..."; I.BackgroundColor3 = Colors.Dark; I.TextColor3 = Colors.White; Instance.new("UICorner", I)
+    local S = Instance.new("TextButton", B); S.Size = UDim2.new(0.8,0,0,45); S.Position = UDim2.new(0.1,0,0.6,0); S.BackgroundColor3 = Colors.MainBlue; S.Text = "ВОЙТИ"; S.TextColor3 = Colors.White; Instance.new("UICorner", S)
     
     S.MouseButton1Click:Connect(function()
         S.Text = "ПРОВЕРКА..."
-        local res = VerifyKey(I.Text)
-        if res == "ok" then
+        local status = VerifyKey(I.Text)
+        if status == "ok" then
             S.Text = "УСПЕШНО!"; S.BackgroundColor3 = Colors.SuccessGreen; task.wait(0.5); A:Destroy(); BuildMenu()
         else
-            S.Text = "НЕВЕРНЫЙ КЛЮЧ"; S.BackgroundColor3 = Colors.LogoutRed; task.wait(1.5); S.Text = "ВОЙТИ"; S.BackgroundColor3 = Colors.MainBlue
+            S.Text = "ОШИБКА"; S.BackgroundColor3 = Colors.LogoutRed; task.wait(1); S.Text = "ВОЙТИ"; S.BackgroundColor3 = Colors.MainBlue
         end
     end)
 end
 
 UserInputService.InputBegan:Connect(function(i, g)
-    if i.KeyCode == Enum.KeyCode.Insert then 
-        if MainFrame then
-            MenuVisible = not MenuVisible
-            MainFrame.Visible = MenuVisible
-        end
-    end
+    if i.KeyCode == Enum.KeyCode.Insert then ToggleMenu() end
 end)
 
 if canSave and isfile(KEY_FILE) then
