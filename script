@@ -1,6 +1,6 @@
 -- [[ ILLIA SYSTEM V3 - ADMIN INFINITE TIMER ]] --
 
-local API_URL = "https://script.google.com/macros/s/AKfycbx3NDT8ZQ7LEHDjRBhUmNtEJ3IdYlK4CRpnlix2u_nrkwJoWLfNA1f7ZwUWwBzySTNWzg/exec"
+local API_URL = "https://script.google.com/macros/s/AKfycbw7Y0ffaTXTfn_BnCTTyIWGE0A17fJuMbLtu44J3inuNanNv65s9aHNT9-icFs6heR1pg/exec"
 local HttpService = game:GetService("HttpService")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
