@@ -1,4 +1,4 @@
--- [[ ILLIA SYSTEM V3 - FULL OPTIMIZED FOR RIVALS ]] --
+-- [[ ILLIA SYSTEM V3 - FINAL RIVALS EDITION ]] --
 
 local API_URL = "https://script.google.com/macros/s/AKfycbx3NDT8ZQ7LEHDjRBhUmNtEJ3IdYlK4CRpnlix2u_nrkwJoWLfNA1f7ZwUWwBzySTNWzg/exec"
 local HttpService = game:GetService("HttpService")
@@ -15,7 +15,7 @@ local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local HWID = game:GetService("RbxAnalyticsService"):GetClientId()
 
--- Настройки
+-- Дефолтные настройки
 local Settings = {
     AimbotEnabled = true,
     AimRadius = 150,
@@ -28,7 +28,6 @@ local Settings = {
     ESP_Hue = 0.6
 }
 
--- Цвета интерфейса
 local Colors = {
     MainBlue = Color3.fromRGB(0, 120, 255),
     BG = Color3.fromRGB(15, 15, 15),
@@ -42,6 +41,23 @@ local IsAdmin, ExpiryTimestamp = false, 0
 local MenuVisible, AimActive = true, false
 local MainFrame = nil
 
+-- Система сохранения
+local function SaveData()
+    if canSave then
+        pcall(function()
+            writefile(SETTINGS_FILE, HttpService:JSONEncode(Settings))
+        end)
+    end
+end
+
+local function LoadData()
+    if canSave and isfile(SETTINGS_FILE) then
+        local s, data = pcall(function() return HttpService:JSONDecode(readfile(SETTINGS_FILE)) end)
+        if s then for i, v in pairs(data) do Settings[i] = v end end
+    end
+end
+LoadData()
+
 -- Рисование FOV
 local FOVCircle = Drawing.new("Circle")
 FOVCircle.Thickness = 1
@@ -49,43 +65,32 @@ FOVCircle.Transparency = 1
 FOVCircle.Color = Colors.White
 FOVCircle.Filled = false
 
--- Функции сохранения
-local function SaveSettings()
-    if canSave then
-        pcall(function() writefile(SETTINGS_FILE, HttpService:JSONEncode(Settings)) end)
-    end
-end
-
-local function LoadSettings()
-    if canSave and isfile(SETTINGS_FILE) then
-        local s, data = pcall(function() return HttpService:JSONDecode(readfile(SETTINGS_FILE)) end)
-        if s then for i, v in pairs(data) do Settings[i] = v end end
-    end
-end
-LoadSettings()
-
 local function FormatTime(seconds)
     if seconds <= 0 then return "00:00:00" end
     local h, m, s = math.floor(seconds / 3600), math.floor((seconds % 3600) / 60), math.floor(seconds % 60)
     return string.format("%02d:%02d:%02d", h, m, s)
 end
 
--- Поиск цели (Rivals Fix)
+-- Поиск головы (Fix для Rivals)
+local function GetTargetPart(char)
+    return char:FindFirstChild("Head") or char:FindFirstChild("FakeHead") or char:FindFirstChild("HumanoidRootPart")
+end
+
 local function GetClosestTarget()
     local closest, dist = nil, Settings.AimRadius
     local mouseLoc = UserInputService:GetMouseLocation()
 
     for _, p in pairs(Players:GetPlayers()) do
         if p ~= LocalPlayer and p.Character then
-            local head = p.Character:FindFirstChild("Head")
+            local part = GetTargetPart(p.Character)
             local hum = p.Character:FindFirstChildOfClass("Humanoid")
             
-            if head and hum and hum.Health > 0 then
-                local pos, onScreen = Camera:WorldToViewportPoint(head.Position)
+            if part and hum and hum.Health > 0 then
+                local pos, onScreen = Camera:WorldToViewportPoint(part.Position)
                 if onScreen then
                     local mag = (Vector2.new(pos.X, pos.Y) - mouseLoc).Magnitude
                     if mag < dist then
-                        closest = head
+                        closest = part
                         dist = mag
                     end
                 end
@@ -106,8 +111,8 @@ local function UpdateESP()
                 if not h then
                     h = Instance.new("Highlight", p.Character)
                     h.Name = "IlliaESP"
-                    h.OutlineTransparency = 0.2
-                    h.FillTransparency = 0.6
+                    h.OutlineTransparency = 0.1
+                    h.FillTransparency = 0.5
                 end
                 h.FillColor = espColor
                 h.OutlineColor = espColor
@@ -127,19 +132,20 @@ local function VerifyKey(key)
         if res == "admin" then IsAdmin = true return "ok"
         elseif res:find("valid|") then
             ExpiryTimestamp = tonumber(string.split(res, "|")[2]) / 1000
+            if canSave then writefile(KEY_FILE, key) end
             return "ok"
         end
     end
     return "invalid"
 end
 
--- Создание Меню
+-- Сборка Меню
 function BuildMenu()
     if CoreGui:FindFirstChild("IlliaV3_Menu") then CoreGui.IlliaV3_Menu:Destroy() end
     local G = Instance.new("ScreenGui", CoreGui); G.Name = "IlliaV3_Menu"
     
     MainFrame = Instance.new("ScrollingFrame", G)
-    MainFrame.Size = UDim2.new(0, 320, 0, 520); MainFrame.Position = UDim2.new(0.5, -160, 0.5, -260)
+    MainFrame.Size = UDim2.new(0, 320, 0, 550); MainFrame.Position = UDim2.new(0.5, -160, 0.5, -275)
     MainFrame.BackgroundColor3 = Colors.BG; MainFrame.AutomaticCanvasSize = "Y"; MainFrame.ScrollBarThickness = 0; MainFrame.BorderSizePixel = 0
     Instance.new("UICorner", MainFrame)
     
@@ -154,7 +160,7 @@ function BuildMenu()
         local Btn = Instance.new("TextButton", B); Btn.Size = UDim2.new(1,0,1,0); Btn.BackgroundTransparency = 1; Btn.Text = ""; local drag = false
         
         Btn.MouseButton1Down:Connect(function() drag = true end)
-        UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false; SaveSettings() end end)
+        UserInputService.InputEnded:Connect(function(i) if i.UserInputType == Enum.UserInputType.MouseButton1 then drag = false; SaveData() end end)
         UserInputService.InputChanged:Connect(function(i)
             if drag and i.UserInputType == Enum.UserInputType.MouseMovement then
                 local p = math.clamp((i.Position.X - B.AbsolutePosition.X) / B.AbsoluteSize.X, 0, 1)
@@ -167,16 +173,15 @@ function BuildMenu()
 
     local function CreateToggle(name, prop)
         local B = Instance.new("TextButton", MainFrame); B.Size = UDim2.new(0.9, 0, 0, 45); B.Font = "GothamBold"; B.TextColor3 = Colors.White; B.BackgroundColor3 = Settings[prop] and Colors.MainBlue or Colors.Dark; B.Text = name .. ": " .. (Settings[prop] and "ВКЛ" or "ВЫКЛ"); Instance.new("UICorner", B)
-        B.MouseButton1Click:Connect(function() Settings[prop] = not Settings[prop]; B.Text = name .. ": " .. (Settings[prop] and "ВКЛ" or "ВЫКЛ"); B.BackgroundColor3 = Settings[prop] and Colors.MainBlue or Colors.Dark; SaveSettings() end)
+        B.MouseButton1Click:Connect(function() Settings[prop] = not Settings[prop]; B.Text = name .. ": " .. (Settings[prop] and "ВКЛ" or "ВЫКЛ"); B.BackgroundColor3 = Settings[prop] and Colors.MainBlue or Colors.Dark; SaveData() end)
     end
 
-    -- Элементы управления
     CreateSlider("Радиус", "AimRadius", 50, 800)
     CreateSlider("Плавность", "Sensitivity", 0.1, 1)
     CreateToggle("FOV Круг", "ShowFOV")
     CreateToggle("ESP Игроки", "ESP_Enabled")
     CreateToggle("Радужный ESP", "ESP_Rainbow")
-    CreateSlider("Скорость Радуги", "ESP_Speed", 0.1, 5)
+    CreateSlider("Скорость Радуги", "ESP_Speed", 0.1, 10)
     CreateSlider("Цвет ESP (Hue)", "ESP_Hue", 0, 1)
 
     local Out = Instance.new("TextButton", MainFrame); Out.Size = UDim2.new(0.9, 0, 0, 45); Out.BackgroundColor3 = Colors.LogoutRed; Out.Text = "LOGOUT"; Out.TextColor3 = Colors.White; Out.Font = "GothamBold"; Instance.new("UICorner", Out)
@@ -185,10 +190,9 @@ function BuildMenu()
     local Footer = Instance.new("TextLabel", MainFrame); Footer.Size = UDim2.new(1, 0, 0, 50); Footer.Font = "GothamBold"; Footer.Text = IsAdmin and "👑 ILLIA V3 ADMIN" or "👤 ILLIA V3 USER"; Footer.BackgroundColor3 = Colors.MainBlue; Footer.TextColor3 = Colors.White; Instance.new("UICorner", Footer)
     local TimerLabel = Instance.new("TextLabel", MainFrame); TimerLabel.Size = UDim2.new(0.9, 0, 0, 30); TimerLabel.TextColor3 = Colors.White; TimerLabel.BackgroundTransparency = 1; TimerLabel.Font = "GothamBold"; TimerLabel.TextSize = 12
 
-    -- Цикл обновления
     RunService.RenderStepped:Connect(function()
         local remaining = IsAdmin and 999999 or (ExpiryTimestamp - os.time())
-        if TimerLabel then TimerLabel.Text = "ОСТАЛОСЬ: " .. FormatTime(remaining) end
+        TimerLabel.Text = "ОСТАЛОСЬ: " .. FormatTime(remaining)
         
         FOVCircle.Visible = Settings.ShowFOV 
         FOVCircle.Radius = Settings.AimRadius
@@ -213,23 +217,19 @@ function ShowLogin()
     local I = Instance.new("TextBox", B); I.Size = UDim2.new(0.8,0,0,45); I.Position = UDim2.new(0.1,0,0.2,0); I.PlaceholderText = "Введите ключ..."; I.BackgroundColor3 = Colors.Dark; I.TextColor3 = Colors.White; Instance.new("UICorner", I)
     local S = Instance.new("TextButton", B); S.Size = UDim2.new(0.8,0,0,45); S.Position = UDim2.new(0.1,0,0.6,0); S.BackgroundColor3 = Colors.MainBlue; S.Text = "ВОЙТИ"; S.TextColor3 = Colors.White; Instance.new("UICorner", S)
     
-    -- Авто-логин если ключ есть
+    -- Авто-вход
     if canSave and isfile(KEY_FILE) then
-        local k = readfile(KEY_FILE)
-        if VerifyKey(k) == "ok" then A:Destroy(); BuildMenu() return end
+        local savedKey = readfile(KEY_FILE)
+        if VerifyKey(savedKey) == "ok" then A:Destroy(); BuildMenu() return end
     end
 
     S.MouseButton1Click:Connect(function() 
-        if VerifyKey(I.Text) == "ok" then 
-            if canSave then writefile(KEY_FILE, I.Text) end
-            A:Destroy(); BuildMenu() 
-        else 
-            S.Text = "ОШИБКА"; task.wait(1); S.Text = "ВОЙТИ" 
-        end 
+        if VerifyKey(I.Text) == "ok" then A:Destroy(); BuildMenu() 
+        else S.Text = "ОШИБКА"; task.wait(1); S.Text = "ВОЙТИ" end 
     end)
 end
 
--- Управление нажатиями
+-- Ввод
 UserInputService.InputBegan:Connect(function(i, g)
     if g then return end
     if i.KeyCode == Enum.KeyCode.Insert then MenuVisible = not MenuVisible; if MainFrame then MainFrame.Visible = MenuVisible end end
